@@ -1,0 +1,6 @@
+.claude/
+# File sao lưu / xuất dữ liệu cá nhân — không bao giờ commit
+coin-manager-*.json
+coin-manager-*.csv
+so-chi-tieu-*.json
+so-chi-tieu-*.csv
