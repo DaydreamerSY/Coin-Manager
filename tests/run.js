@@ -1,0 +1,18 @@
+import { runParserTests } from './parser.test.js';
+import { runVaultTests } from './vault.test.js';
+
+const results = [...runParserTests()];
+try {
+  results.push(...await runVaultTests());
+} catch (e) {
+  results.push({ text: '[mã hoá] lỗi khi chạy', ok: false, detail: String(e?.stack || e) });
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+const pass = results.filter(r => r.ok).length;
+document.title = `${pass === results.length ? 'PASS' : 'FAIL'} ${pass}/${results.length}`;
+document.getElementById('summary').textContent = document.title;
+document.getElementById('out').innerHTML = results
+  .map(r => `<tr class="${r.ok ? 'ok' : 'bad'}"><td>${r.ok ? '✓' : '✗'}</td><td>${esc(r.text)}</td><td>${esc(r.detail)}</td></tr>`)
+  .join('');
+window.__results = results;

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a78d6">
+<meta name="description" content="Ghi chi tiêu bằng giọng nói tiếng Việt, dữ liệu mã hoá ngay trên máy.">
+<title>Sổ Chi Tiêu</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <h1>Sổ Chi Tiêu</h1>
+  <span class="topbar-right">
+    <span id="month-spent" class="topbar-meta"></span>
+    <button id="lock-btn" class="lock-btn" type="button" hidden></button>
+  </span>
+</header>
+
+<main>
+  <!-- TẠO MẬT KHẨU (lần đầu) -->
+  <section id="view-setup" class="view" data-view="setup" hidden>
+    <div class="card gate">
+      <div class="gate-icon" aria-hidden="true">🔐</div>
+      <h2>Bảo vệ dữ liệu bằng mật khẩu</h2>
+      <ul class="gate-points">
+        <li>Mọi khoản chi được <b>mã hoá ngay trên máy</b> (AES-256) trước khi lưu. Không có gì gửi lên mạng.</li>
+        <li>Đang khoá vẫn <b>ghi bằng giọng nói được</b>, chỉ cần mật khẩu khi xem lại.</li>
+        <li><b>Quên mật khẩu là mất dữ liệu.</b> Không ai khôi phục được, kể cả người viết app.</li>
+      </ul>
+      <form id="setup-form" class="gate-form" autocomplete="on">
+        <input class="sr-only" type="text" name="username" autocomplete="username" value="Coin Manager" tabindex="-1" aria-hidden="true" readonly>
+        <label>Mật khẩu <input name="pass" type="password" autocomplete="new-password" required></label>
+        <label>Nhập lại <input name="pass2" type="password" autocomplete="new-password" required></label>
+        <p class="muted hint">Ít nhất 8 ký tự. Một câu ngắn chỉ bạn biết (có dấu cũng được) vừa dễ nhớ vừa khó dò hơn dãy số.</p>
+        <p class="form-error" role="alert"></p>
+        <button class="btn primary" type="submit">Tạo mật khẩu &amp; bắt đầu</button>
+      </form>
+      <p class="muted center">Đổi máy? <label class="link">Khôi phục từ bản sao lưu<input id="restore-file" type="file" accept=".json,application/json" hidden></label></p>
+    </div>
+  </section>
+
+  <!-- MỞ KHOÁ -->
+  <section id="view-lock" class="view" data-view="lock" hidden>
+    <div class="card gate">
+      <div class="gate-icon" aria-hidden="true">🔒</div>
+      <h2>Đang khoá</h2>
+      <p id="lock-msg" class="muted"></p>
+      <form id="unlock-form" class="gate-form" autocomplete="on">
+        <input class="sr-only" type="text" name="username" autocomplete="username" value="Coin Manager" tabindex="-1" aria-hidden="true" readonly>
+        <label>Mật khẩu <input name="pass" type="password" autocomplete="current-password" required></label>
+        <p class="form-error" role="alert"></p>
+        <button class="btn primary" type="submit">Mở khoá</button>
+      </form>
+      <details class="forgot">
+        <summary>Quên mật khẩu?</summary>
+        <p class="muted">Dữ liệu được mã hoá bằng chính mật khẩu của bạn nên không có cách lấy lại. Bạn có thể xoá hết để bắt đầu lại, rồi khôi phục từ bản sao lưu nếu còn nhớ mật khẩu lúc sao lưu.</p>
+        <button id="forgot-wipe" class="btn danger" type="button">Xoá toàn bộ và bắt đầu lại…</button>
+      </details>
+    </div>
+  </section>
+
+  <!-- GHI -->
+  <section id="view-record" class="view" data-view="record">
+    <div class="mic-wrap">
+      <button id="mic" class="mic" type="button" aria-label="Bấm để nói">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+      </button>
+      <p id="mic-status" class="mic-status">Bấm micro rồi nói, ví dụ: <q>bánh mì heo quay mười lăm nghìn</q></p>
+      <p id="transcript" class="transcript" hidden></p>
+      <div id="alts" class="alts" hidden></div>
+    </div>
+
+    <form id="text-form" class="text-form" autocomplete="off">
+      <input id="text-input" type="text" enterkeyhint="done" placeholder="Hoặc gõ: bánh mì 15k, cà phê 25k" aria-label="Gõ khoản chi">
+      <button class="btn" type="submit">Thêm</button>
+    </form>
+
+    <div id="preview" class="card preview" hidden>
+      <div id="preview-items"></div>
+      <label class="pv-date">Ngày <input id="pv-date" type="date"></label>
+      <div class="row-end">
+        <button id="pv-cancel" class="btn ghost" type="button">Huỷ</button>
+        <button id="pv-save" class="btn primary" type="button">Lưu</button>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2 class="card-title"><span>Hôm nay</span><span id="today-total" class="muted"></span></h2>
+      <ul id="today-list" class="tx-list"></ul>
+    </section>
+
+    <details class="card howto">
+      <summary>Cách nói để máy hiểu đúng</summary>
+      <p><b>Mẫu câu:</b> <code>[tên khoản] [số tiền] [đơn vị]</code></p>
+      <ul>
+        <li><q>bánh mì heo quay mười lăm nghìn</q> → 15.000đ</li>
+        <li><q>cà phê sữa hai lăm k</q> → 25.000đ</li>
+        <li><q>đổ xăng một trăm rưỡi</q> → 150.000đ <span class="muted">(không nói đơn vị thì hiểu là nghìn)</span></li>
+        <li><q>tiền nhà ba triệu hai</q> → 3.200.000đ</li>
+        <li><q>trà sữa ba mươi lăm nghìn và bánh tráng hai chục</q> → 2 khoản</li>
+        <li><q>hôm qua ăn phở năm mươi lăm nghìn</q> → ghi vào hôm qua</li>
+        <li><q>nhận lương mười lăm triệu</q> hoặc <q>thu …</q> → khoản thu</li>
+      </ul>
+      <p class="muted">Đơn vị hiểu được: nghìn/ngàn/k/ca, triệu/tr, tỷ. Tiếng lóng củ (triệu), lít/xị (trăm nghìn) bật/tắt trong Cài đặt.
+        Danh mục được đoán theo từ khoá; khi bạn sửa danh mục, app sẽ nhớ cho lần sau.</p>
+    </details>
+  </section>
+
+  <!-- LỊCH SỬ -->
+  <section id="view-history" class="view" data-view="history" hidden>
+    <div class="month-nav" data-month-nav></div>
+    <div class="filters">
+      <input id="hist-q" type="search" placeholder="Tìm theo tên…" aria-label="Tìm theo tên">
+      <select id="hist-cat" aria-label="Lọc danh mục"></select>
+    </div>
+    <p id="hist-summary" class="muted"></p>
+    <div id="hist-list"></div>
+  </section>
+
+  <!-- THỐNG KÊ -->
+  <section id="view-stats" class="view" data-view="stats" hidden>
+    <div class="month-nav" data-month-nav></div>
+    <div id="stats-body"></div>
+  </section>
+
+  <!-- CÀI ĐẶT -->
+  <section id="view-settings" class="view" data-view="settings" hidden>
+    <section class="card">
+      <h2 class="card-title">Bảo mật</h2>
+      <p class="muted">Dữ liệu được mã hoá AES-256-GCM ngay trên máy. Khoá sinh từ mật khẩu (PBKDF2, 600.000 vòng) và chỉ nằm trong bộ nhớ khi đang mở.</p>
+      <label class="field-row">Tự khoá khi rời app quá
+        <select id="set-lockafter">
+          <option value="0">Ngay lập tức</option>
+          <option value="1">1 phút</option>
+          <option value="5">5 phút</option>
+          <option value="15">15 phút</option>
+          <option value="60">1 giờ</option>
+        </select>
+      </label>
+      <div class="btn-row">
+        <button id="lock-now" class="btn" type="button">🔒 Khoá ngay</button>
+        <button id="change-pass" class="btn" type="button">Đổi mật khẩu</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Nhận diện</h2>
+      <label class="switch"><input id="set-slang" type="checkbox"> <span>Hiểu tiếng lóng: <b>củ</b> = triệu, <b>lít/xị</b> = trăm nghìn, <b>cành</b> = nghìn</span></label>
+      <label class="switch"><input id="set-autosave" type="checkbox"> <span>Tự lưu sau 3 giây khi nhận diện đủ tên và số tiền</span></label>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Danh mục &amp; từ khoá</h2>
+      <p class="muted">Thêm từ khoá riêng cho từng danh mục, cách nhau bằng dấu phẩy. Từ khoá dài hơn sẽ được ưu tiên.</p>
+      <div id="cat-settings"></div>
+      <form id="cat-add" class="cat-add" autocomplete="off">
+        <input name="icon" maxlength="4" placeholder="🐱" aria-label="Biểu tượng">
+        <input name="name" required placeholder="Tên danh mục mới" aria-label="Tên danh mục mới">
+        <select name="type" aria-label="Loại"><option value="expense">Chi</option><option value="income">Thu</option></select>
+        <button class="btn" type="submit">Thêm</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Đã học từ bạn</h2>
+      <ul id="learned-list" class="learned-list"></ul>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Dữ liệu</h2>
+      <p id="data-info" class="muted"></p>
+      <div class="btn-row">
+        <button id="export-json" class="btn" type="button">Sao lưu (đã mã hoá)</button>
+        <button id="export-csv" class="btn" type="button">Xuất Excel (CSV, không mã hoá)</button>
+        <label class="btn">Khôi phục từ file<input id="import-json" type="file" accept="application/json,.json" hidden></label>
+      </div>
+      <button id="wipe" class="btn danger" type="button">Xoá toàn bộ dữ liệu…</button>
+    </section>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button type="button" data-tab="record"><span aria-hidden="true">🎤</span>Ghi</button>
+  <button type="button" data-tab="history"><span aria-hidden="true">📒</span>Lịch sử</button>
+  <button type="button" data-tab="stats"><span aria-hidden="true">📊</span>Thống kê</button>
+  <button type="button" data-tab="settings"><span aria-hidden="true">⚙️</span>Cài đặt</button>
+</nav>
+
+<dialog id="edit-dialog">
+  <form id="edit-form" method="dialog">
+    <h2>Sửa khoản</h2>
+    <label>Tên <input name="name" required></label>
+    <label>Số tiền <input name="amount" inputmode="numeric" required></label>
+    <label>Danh mục <select name="category"></select></label>
+    <label>Ngày <input name="date" type="date" required></label>
+    <p class="muted" id="edit-raw"></p>
+    <div class="row-end">
+      <button class="btn danger ghost" type="button" id="edit-delete">Xoá</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="save">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="change-pass-dialog">
+  <form id="change-pass-form" method="dialog" autocomplete="on">
+    <h2>Đổi mật khẩu</h2>
+    <input class="sr-only" type="text" name="username" autocomplete="username" value="Coin Manager" tabindex="-1" aria-hidden="true" readonly>
+    <label>Mật khẩu hiện tại <input name="old" type="password" autocomplete="current-password" required></label>
+    <label>Mật khẩu mới <input name="pass" type="password" autocomplete="new-password" required></label>
+    <label>Nhập lại mật khẩu mới <input name="pass2" type="password" autocomplete="new-password" required></label>
+    <p class="form-error" role="alert"></p>
+    <div class="row-end">
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="save">Đổi mật khẩu</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="ask-pass-dialog">
+  <form id="ask-pass-form" method="dialog">
+    <h2>Mật khẩu của bản sao lưu</h2>
+    <p id="ask-pass-msg" class="muted"></p>
+    <label>Mật khẩu <input name="pass" type="password" autocomplete="off" required></label>
+    <p class="form-error" role="alert"></p>
+    <div class="row-end">
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="ok">Mở</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
