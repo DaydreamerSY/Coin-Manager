@@ -1,6 +1,6 @@
 # Coin Manager — Sổ Chi Tiêu
 
-Ghi chi tiêu bằng giọng nói tiếng Việt. Bấm micro, nói *"bánh mì heo quay mười lăm nghìn"*, app tự tách **tên khoản**, **số tiền** và **danh mục**. Không dùng AI, không cần máy chủ: dữ liệu **mã hoá** và lưu ngay trên điện thoại.
+Ghi chi tiêu bằng giọng nói tiếng Việt, giao diện con vịt 🦆. Bấm micro, đọc *"bánh hai lăm nước ngọt hai lăm rau hai lăm"*, app tự tách **từng món**, **giá** và **danh mục**. Về nhà có thể **chia nhỏ hoá đơn** đã ghi. Không dùng AI, không cần máy chủ: dữ liệu **mã hoá** và lưu ngay trên điện thoại.
 
 **Mở app:** <https://daydreamersy.github.io/Coin-Manager/>
 
@@ -10,18 +10,21 @@ Ghi chi tiêu bằng giọng nói tiếng Việt. Bấm micro, nói *"bánh mì 
 
 ## Cách nói
 
-Mẫu câu: **`[tên khoản] [số tiền] [đơn vị]`**
+Mẫu câu: **`[món] [giá] [món] [giá] …`** — không cần đọc đơn vị, số dưới 1000 hiểu là nghìn.
 
 | Bạn nói | App hiểu |
 |---|---|
-| bánh mì heo quay mười lăm nghìn | Bánh mì heo quay · 15.000đ · Ăn uống |
-| bánh mì heo quay mười lăm ca / 15k | 15.000đ |
+| bánh hai lăm nước ngọt hai lăm rau hai lăm | 3 khoản: Bánh 25.000đ (Ăn uống) · Nước ngọt 25.000đ (Đồ uống) · Rau 25.000đ (Đi chợ) |
+| siêu thị một trăm | Siêu thị · 100.000đ · Đi chợ & siêu thị |
+| phở bò năm lăm cà phê hai mươi | 55.000đ + 20.000đ |
+| bánh mì heo quay mười lăm nghìn / mười lăm ca / 15k | 15.000đ (vẫn hiểu khi có đơn vị) |
 | cà phê sữa hai lăm k | 25.000đ · Cà phê & đồ uống |
 | đổ xăng một trăm rưỡi | 150.000đ (không nói đơn vị → hiểu là nghìn) |
 | tiền nhà ba triệu hai | 3.200.000đ · Nhà ở |
 | tiền điện một triệu hai trăm ba mươi | 1.230.000đ |
 | trà sữa ba mươi lăm nghìn và bánh tráng hai chục | 2 khoản: 35.000đ + 20.000đ |
-| bánh mì hai ổ ba mươi nghìn | "Bánh mì hai ổ" · 30.000đ (số lượng không bị nhầm là tiền) |
+| bánh mì hai ổ ba mươi · cà phê 2 ly 50 · xăng 2 lít 50 | "Bánh mì hai ổ" 30.000đ · "Cà phê 2 ly" 50.000đ · "Xăng 2 lít" 50.000đ (ổ, ly, chai, kg, người… là số lượng) |
+| quà năm mới hai trăm · quà cho ba mẹ năm trăm | 200.000đ · 500.000đ ("năm mới", "ba mẹ" không bị nhầm là số) |
 | tiền điện tháng chín năm trăm nghìn | "Tiền điện tháng chín" · 500.000đ |
 | hôm qua ăn phở năm mươi lăm nghìn | ghi vào ngày hôm qua |
 | nhận lương mười lăm triệu · thu bán đồ cũ hai trăm nghìn | khoản **thu** |
@@ -30,6 +33,24 @@ Mẫu câu: **`[tên khoản] [số tiền] [đơn vị]`**
 - Nói tắt: hai lăm (25), bốn mốt (41), ba tư (34), băm sáu (36), trăm rưỡi (150), ba triệu hai (3,2 triệu).
 - Danh mục đoán theo **từ khoá dài nhất** khớp trong tên ("grab food" → Ăn uống, "grab" → Di chuyển). Khi bạn đổi danh mục của một khoản, app **ghi nhớ** cho lần sau (xem/xoá trong Cài đặt → Đã học từ bạn).
 - Thêm từ khoá riêng hoặc danh mục mới trong Cài đặt.
+
+## Chia nhỏ hoá đơn
+
+Ở siêu thị chỉ cần nói *"siêu thị một trăm"*. Về nhà chạm vào khoản đó → **✂️ Chia nhỏ hoá đơn** → nói (🎤) hoặc gõ *"bánh 25 nước ngọt 25 rau 25"*:
+
+```
+Siêu thị 100.000đ  (Đi chợ & siêu thị)
+ ├─ Bánh       25.000đ → Ăn uống
+ ├─ Nước ngọt  25.000đ → Cà phê & đồ uống
+ ├─ Rau        25.000đ → Đi chợ & siêu thị
+ └─ Còn lại    25.000đ → Đi chợ & siêu thị (danh mục của hoá đơn)
+```
+
+- Mỗi món tự đoán danh mục theo từ khoá; món không đoán được thì theo danh mục của hoá đơn. Đổi được từng món.
+- **Thống kê theo danh mục, biểu đồ theo ngày và "mua thường xuyên" tính theo từng món**, phần chưa chia tính vào danh mục của hoá đơn. Lịch sử vẫn hiện hoá đơn là một khoản, kèm dòng tóm tắt các món.
+- Lọc lịch sử theo danh mục sẽ ra cả hoá đơn có món thuộc danh mục đó, và chỉ cộng phần của danh mục đó. Tìm kiếm tìm cả tên món.
+- Các món cộng lại không được vượt tổng; app chặn lưu và gợi ý "Đặt tổng = …".
+- Xuất CSV: mỗi món một dòng, cột *Hoá đơn* cho biết thuộc khoản nào.
 
 ## Bảo mật
 
@@ -89,6 +110,7 @@ python -m http.server 8765
 ```
 
 - App: <http://localhost:8765/>. Nhận giọng nói chạy trong Chrome trên máy tính; ô gõ tay dùng chung bộ phân tích.
+- Ở `localhost` app **không bật chế độ offline** để luôn thấy code mới; thêm `?sw` vào URL nếu muốn thử offline.
 - Test: <http://localhost:8765/tests/> — bộ phân tích câu nói + mã hoá. Tiêu đề tab hiện `PASS n/n` hoặc `FAIL`.
 
 ## Cấu trúc
@@ -103,6 +125,7 @@ js/db.js               IndexedDB thô
 js/app.js              điều khiển giao diện, khoá/mở khoá, thống kê
 js/voice.js            Web Speech API (vi-VN)
 js/charts.js           biểu đồ cột theo ngày (SVG, không thư viện)
+icons/duck*.svg        linh vật vịt (vẽ tay bằng SVG)
 sw.js                  chạy offline
 tests/                 test (mở bằng trình duyệt)
 ```

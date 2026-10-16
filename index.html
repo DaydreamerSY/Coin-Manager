@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2a78d6">
+<meta name="theme-color" content="#FFC93C">
 <meta name="description" content="Ghi chi tiêu bằng giọng nói tiếng Việt, dữ liệu mã hoá ngay trên máy.">
 <title>Sổ Chi Tiêu</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -16,7 +16,7 @@
 </head>
 <body>
 <header class="topbar">
-  <h1>Sổ Chi Tiêu</h1>
+  <h1><img class="logo" src="icons/duck.svg" alt="" width="36" height="30"> Sổ Chi Tiêu</h1>
   <span class="topbar-right">
     <span id="month-spent" class="topbar-meta"></span>
     <button id="lock-btn" class="lock-btn" type="button" hidden></button>
@@ -27,7 +27,7 @@
   <!-- TẠO MẬT KHẨU (lần đầu) -->
   <section id="view-setup" class="view" data-view="setup" hidden>
     <div class="card gate">
-      <div class="gate-icon" aria-hidden="true">🔐</div>
+      <div class="gate-art" aria-hidden="true"><img src="icons/duck.svg" alt="" width="150" height="124"><span class="gate-badge">🔐</span></div>
       <h2>Bảo vệ dữ liệu bằng mật khẩu</h2>
       <ul class="gate-points">
         <li>Mọi khoản chi được <b>mã hoá ngay trên máy</b> (AES-256) trước khi lưu. Không có gì gửi lên mạng.</li>
@@ -49,7 +49,7 @@
   <!-- MỞ KHOÁ -->
   <section id="view-lock" class="view" data-view="lock" hidden>
     <div class="card gate">
-      <div class="gate-icon" aria-hidden="true">🔒</div>
+      <div class="gate-art" aria-hidden="true"><img src="icons/duck.svg" alt="" width="150" height="124"><span class="gate-badge">🔒</span></div>
       <h2>Đang khoá</h2>
       <p id="lock-msg" class="muted"></p>
       <form id="unlock-form" class="gate-form" autocomplete="on">
@@ -68,17 +68,23 @@
 
   <!-- GHI -->
   <section id="view-record" class="view" data-view="record">
+    <section class="summary-card">
+      <img class="duck-peek" src="icons/duck-peek.svg" alt="" width="96" height="67">
+      <div class="sum-col"><span class="sum-label" id="sum-exp-label">Chi tháng này</span><b id="sum-exp" class="sum-value">—</b></div>
+      <div class="sum-col"><span class="sum-label" id="sum-inc-label">Thu tháng này</span><b id="sum-inc" class="sum-value">—</b></div>
+    </section>
+
     <div class="mic-wrap">
       <button id="mic" class="mic" type="button" aria-label="Bấm để nói">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
       </button>
-      <p id="mic-status" class="mic-status">Bấm micro rồi nói, ví dụ: <q>bánh mì heo quay mười lăm nghìn</q></p>
+      <p id="mic-status" class="mic-status">Bấm micro rồi đọc các món kèm giá, ví dụ: <q>bánh hai lăm nước ngọt hai lăm rau hai lăm</q></p>
       <p id="transcript" class="transcript" hidden></p>
       <div id="alts" class="alts" hidden></div>
     </div>
 
     <form id="text-form" class="text-form" autocomplete="off">
-      <input id="text-input" type="text" enterkeyhint="done" placeholder="Hoặc gõ: bánh mì 15k, cà phê 25k" aria-label="Gõ khoản chi">
+      <input id="text-input" type="text" enterkeyhint="done" placeholder="Hoặc gõ: bánh 25 nước ngọt 25" aria-label="Gõ khoản chi">
       <button class="btn" type="submit">Thêm</button>
     </form>
 
@@ -93,22 +99,20 @@
 
     <section class="card">
       <h2 class="card-title"><span>Hôm nay</span><span id="today-total" class="muted"></span></h2>
-      <ul id="today-list" class="tx-list"></ul>
+      <ul id="today-list" class="tx-list timeline"></ul>
     </section>
 
     <details class="card howto">
       <summary>Cách nói để máy hiểu đúng</summary>
-      <p><b>Mẫu câu:</b> <code>[tên khoản] [số tiền] [đơn vị]</code></p>
+      <p><b>Mẫu câu:</b> <code>[món] [giá] [món] [giá] …</code> — không cần nói đơn vị, số dưới 1000 hiểu là nghìn.</p>
       <ul>
-        <li><q>bánh mì heo quay mười lăm nghìn</q> → 15.000đ</li>
-        <li><q>cà phê sữa hai lăm k</q> → 25.000đ</li>
-        <li><q>đổ xăng một trăm rưỡi</q> → 150.000đ <span class="muted">(không nói đơn vị thì hiểu là nghìn)</span></li>
-        <li><q>tiền nhà ba triệu hai</q> → 3.200.000đ</li>
-        <li><q>trà sữa ba mươi lăm nghìn và bánh tráng hai chục</q> → 2 khoản</li>
-        <li><q>hôm qua ăn phở năm mươi lăm nghìn</q> → ghi vào hôm qua</li>
-        <li><q>nhận lương mười lăm triệu</q> hoặc <q>thu …</q> → khoản thu</li>
+        <li><q>bánh hai lăm nước ngọt hai lăm rau hai lăm</q> → 3 khoản, mỗi khoản 25.000đ</li>
+        <li><q>siêu thị một trăm</q> → 100.000đ (về nhà chạm vào khoản để <b>chia nhỏ</b>)</li>
+        <li><q>đổ xăng một trăm rưỡi</q> → 150.000đ · <q>tiền nhà ba triệu hai</q> → 3.200.000đ</li>
+        <li><q>bánh mì hai ổ ba mươi</q> → “Bánh mì hai ổ” 30.000đ <span class="muted">(ổ, ly, chai, kg… là số lượng)</span></li>
+        <li><q>hôm qua phở năm lăm</q> → ghi vào hôm qua · <q>nhận lương mười lăm triệu</q> → khoản thu</li>
       </ul>
-      <p class="muted">Đơn vị hiểu được: nghìn/ngàn/k/ca, triệu/tr, tỷ. Tiếng lóng củ (triệu), lít/xị (trăm nghìn) bật/tắt trong Cài đặt.
+      <p class="muted">Vẫn hiểu khi có đơn vị: nghìn/ngàn/k/ca, triệu/tr, tỷ. Tiếng lóng củ (triệu), lít/xị (trăm nghìn) bật/tắt trong Cài đặt.
         Danh mục được đoán theo từ khoá; khi bạn sửa danh mục, app sẽ nhớ cho lần sau.</p>
     </details>
   </section>
@@ -193,13 +197,30 @@
   <button type="button" data-tab="settings"><span aria-hidden="true">⚙️</span>Cài đặt</button>
 </nav>
 
-<dialog id="edit-dialog">
+<dialog id="edit-dialog" class="sheet">
   <form id="edit-form" method="dialog">
     <h2>Sửa khoản</h2>
     <label>Tên <input name="name" required></label>
-    <label>Số tiền <input name="amount" inputmode="numeric" required></label>
+    <div class="row-2">
+      <label>Tổng tiền <input name="amount" inputmode="numeric" required></label>
+      <label>Ngày <input name="date" type="date" required></label>
+    </div>
     <label>Danh mục <select name="category"></select></label>
-    <label>Ngày <input name="date" type="date" required></label>
+
+    <section class="split-box" aria-labelledby="split-title">
+      <div class="split-head">
+        <h3 id="split-title">✂️ Chia nhỏ hoá đơn</h3>
+        <button type="button" class="mini-mic" id="split-mic" aria-label="Nói các món">🎤</button>
+      </div>
+      <div class="split-add">
+        <input id="split-input" type="text" enterkeyhint="done" autocomplete="off" placeholder="bánh 25 nước ngọt 25 rau 25" aria-label="Thêm món">
+        <button type="button" class="btn" id="split-add-btn">Thêm</button>
+      </div>
+      <p id="split-status" class="hint muted" hidden></p>
+      <ul id="split-list" class="split-list"></ul>
+      <div id="split-rest" class="split-rest"></div>
+    </section>
+
     <p class="muted" id="edit-raw"></p>
     <div class="row-end">
       <button class="btn danger ghost" type="button" id="edit-delete">Xoá</button>
