@@ -74,28 +74,12 @@
       <div class="sum-col"><span class="sum-label" id="sum-inc-label">Thu tháng này</span><b id="sum-inc" class="sum-value">—</b></div>
     </section>
 
-    <div class="mic-wrap">
-      <button id="mic" class="mic" type="button" aria-label="Bấm để nói">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
-      </button>
-      <p id="mic-status" class="mic-status">Bấm micro rồi đọc các món kèm giá, ví dụ: <q>bánh hai lăm nước ngọt hai lăm rau hai lăm</q></p>
-      <p id="transcript" class="transcript" hidden></p>
-      <div id="alts" class="alts" hidden></div>
-    </div>
+    <p class="mic-hint">Bấm <span class="mic-hint-icon" aria-hidden="true">🎤</span> ở dưới rồi đọc các món kèm giá, ví dụ: <q>bánh hai lăm nước ngọt hai lăm rau hai lăm</q></p>
 
     <form id="text-form" class="text-form" autocomplete="off">
       <input id="text-input" type="text" enterkeyhint="done" placeholder="Hoặc gõ: bánh 25 nước ngọt 25" aria-label="Gõ khoản chi">
       <button class="btn" type="submit">Thêm</button>
     </form>
-
-    <div id="preview" class="card preview" hidden>
-      <div id="preview-items"></div>
-      <label class="pv-date">Ngày <input id="pv-date" type="date"></label>
-      <div class="row-end">
-        <button id="pv-cancel" class="btn ghost" type="button">Huỷ</button>
-        <button id="pv-save" class="btn primary" type="button">Lưu</button>
-      </div>
-    </div>
 
     <section class="card">
       <h2 class="card-title"><span>Hôm nay</span><span id="today-total" class="muted"></span></h2>
@@ -162,7 +146,7 @@
 
     <section class="card">
       <h2 class="card-title">Danh mục &amp; từ khoá</h2>
-      <p class="muted">Thêm từ khoá riêng cho từng danh mục, cách nhau bằng dấu phẩy. Từ khoá dài hơn sẽ được ưu tiên.</p>
+      <p class="muted">Chạm vào một danh mục, gõ từ khoá rồi bấm <b>Lưu</b> (nhiều từ thì cách nhau bằng dấu phẩy). Từ khoá dài hơn được ưu tiên; dài bằng nhau thì từ của bạn thắng từ có sẵn.</p>
       <div id="cat-settings"></div>
       <form id="cat-add" class="cat-add" autocomplete="off">
         <input name="icon" maxlength="4" placeholder="🐱" aria-label="Biểu tượng">
@@ -190,9 +174,28 @@
   </section>
 </main>
 
+<!-- Bảng ghi nhanh: nổi ngay trên nút micro để bấm Lưu bằng ngón cái -->
+<section id="capture" class="capture" aria-live="polite" hidden>
+  <div class="cap-head">
+    <p id="mic-status" class="mic-status"></p>
+    <button id="cap-close" class="icon-btn" type="button" aria-label="Đóng">✕</button>
+  </div>
+  <p id="transcript" class="transcript" hidden></p>
+  <div id="alts" class="alts" hidden></div>
+  <div id="preview" class="preview" hidden>
+    <div id="preview-items"></div>
+    <label class="pv-date">Ngày <input id="pv-date" type="date"></label>
+    <div class="row-end">
+      <button id="pv-cancel" class="btn ghost" type="button">Huỷ</button>
+      <button id="pv-save" class="btn primary" type="button">Lưu</button>
+    </div>
+  </div>
+</section>
+
 <nav class="tabbar">
-  <button type="button" data-tab="record"><span aria-hidden="true">🎤</span>Ghi</button>
+  <button type="button" data-tab="record"><span aria-hidden="true">🏠</span>Hôm nay</button>
   <button type="button" data-tab="history"><span aria-hidden="true">📒</span>Lịch sử</button>
+  <div class="fab-slot"><button id="mic" class="mic fab" type="button" aria-label="Bấm để nói"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button></div>
   <button type="button" data-tab="stats"><span aria-hidden="true">📊</span>Thống kê</button>
   <button type="button" data-tab="settings"><span aria-hidden="true">⚙️</span>Cài đặt</button>
 </nav>

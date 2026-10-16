@@ -122,5 +122,12 @@ export function runParserTests() {
     const got = classify(name, cats, learned);
     results.push({ text: `[đã học] ${name}`, ok: got === cat, detail: `${got}` + (got === cat ? '' : ` ≠ ${cat}`) });
   }
+
+  // Từ khoá bạn tự thêm thắng từ khoá có sẵn khi dài bằng nhau; từ có sẵn dài hơn vẫn thắng
+  const mine = buildCategories({ extraKeywords: { 'di-cho': ['bánh', 'Bánh Flan'], 'gia-dinh': ['pate mèo'] } });
+  for (const [name, cat] of [['bánh', 'di-cho'], ['bánh mì', 'an-uong'], ['bánh flan', 'di-cho'], ['pate mèo', 'gia-dinh'], ['banh', 'di-cho']]) {
+    const got = classify(name, mine);
+    results.push({ text: `[từ khoá riêng] ${name}`, ok: got === cat, detail: `${got}` + (got === cat ? '' : ` ≠ ${cat}`) });
+  }
   return results;
 }

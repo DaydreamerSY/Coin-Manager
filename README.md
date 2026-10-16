@@ -32,7 +32,13 @@ Mẫu câu: **`[món] [giá] [món] [giá] …`** — không cần đọc đơn 
 - Đơn vị: nghìn / ngàn / k / ca, triệu / tr, tỷ. Tiếng lóng **củ** (triệu), **lít / xị** (trăm nghìn), **cành** (nghìn) bật/tắt trong Cài đặt.
 - Nói tắt: hai lăm (25), bốn mốt (41), ba tư (34), băm sáu (36), trăm rưỡi (150), ba triệu hai (3,2 triệu).
 - Danh mục đoán theo **từ khoá dài nhất** khớp trong tên ("grab food" → Ăn uống, "grab" → Di chuyển). Khi bạn đổi danh mục của một khoản, app **ghi nhớ** cho lần sau (xem/xoá trong Cài đặt → Đã học từ bạn).
-- Thêm từ khoá riêng hoặc danh mục mới trong Cài đặt.
+- Thêm từ khoá riêng trong **Cài đặt → Danh mục & từ khoá**: chạm vào danh mục, gõ từ khoá, bấm **Lưu**. Từ khoá bạn thêm thắng từ khoá có sẵn khi dài bằng nhau (ví dụ thêm "bánh" cho Đi chợ).
+- Nút 🎤 nằm giữa thanh dưới cùng (tầm ngón cái) và dùng được ở mọi tab; kết quả + nút Lưu hiện ngay phía trên nút.
+
+## Thống kê
+
+- **Tỉ lệ chi tiêu** (donut): tối đa 6 phần — 5 danh mục lớn nhất + "Khác" gộp phần còn lại, theo khuyến nghị trực quan hoá dữ liệu (nhiều phần hơn thì mắt khó so). Bảng chú giải luôn có icon, % và số tiền; chạm lát hoặc dòng để xem ở giữa. Danh sách đầy đủ ở "Chi theo danh mục" ngay bên dưới.
+- Chi theo ngày (bỏ/không bỏ tiền nhà & hoá đơn), khoản lớn nhất, mua thường xuyên.
 
 ## Chia nhỏ hoá đơn
 
@@ -126,6 +132,7 @@ js/app.js              điều khiển giao diện, khoá/mở khoá, thống k�
 js/voice.js            Web Speech API (vi-VN)
 js/charts.js           biểu đồ cột theo ngày (SVG, không thư viện)
 icons/duck*.svg        linh vật vịt (vẽ tay bằng SVG)
+fonts/                 Nunito (SIL OFL 1.1, xem fonts/OFL.txt) — tự host, không tải từ Google
 sw.js                  chạy offline
 tests/                 test (mở bằng trình duyệt)
 ```
