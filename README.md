@@ -102,6 +102,7 @@ khoá công khai ECDH (để dạng thường) ─► ghi khoản mới khi đan
 - App chỉ dùng **thư mục ẩn riêng của app** trên Drive (quyền `drive.appdata`) — không thấy trong Drive của bạn, không đụng tới file nào khác — và chỉ ghi **một file bản sao lưu đã mã hoá**. Google không đọc được nội dung.
 - **Thêm máy mới:** mở app → *Lấy dữ liệu từ Google Drive* → mở khoá bằng cùng mật khẩu. Nếu máy đó lỡ tạo mật khẩu riêng rồi, bấm đồng bộ sẽ hỏi mật khẩu của dữ liệu trên Drive, gộp lại, và từ đó máy đó dùng chung mật khẩu.
 - **Gộp:** cùng một khoản thì bản sửa sau cùng thắng; khoản xoá ở máy này cũng bị xoá ở máy kia (app lưu "dấu xoá" đã mã hoá). Đổi mật khẩu ở một máy → máy kia nhận mật khẩu mới ở lần đồng bộ sau.
+- **App cài trên màn hình chính (Android):** cửa sổ đăng nhập Google mở ra tab Chrome riêng và không liên lạc được với app, nên app dùng trang chuyển tiếp `oauth.html` — đăng nhập xong quay lại app là đồng bộ tự chạy tiếp. Cần khai báo `https://daydreamersy.github.io/Coin-Manager/oauth.html` trong *Authorized redirect URIs* của OAuth client. Mở trong trình duyệt thì dùng thư viện Google như bình thường.
 - **Tự đồng bộ khi mở khoá** (tối đa 6 giờ một lần). Không có máy chủ nên quyền Google chỉ sống ~1 giờ và phải có một lần bấm để xin lại — khi mở khoá có thể chớp một cửa sổ Google rồi tự đóng.
 - Ngắt kết nối: *Ngắt kết nối* trong Cài đặt. Muốn xoá hẳn dữ liệu trên Drive: Google Drive → Cài đặt → Quản lý ứng dụng.
 

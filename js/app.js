@@ -94,6 +94,7 @@ async function init() {
   }
   await store.init();
   state.settings = { ...DEFAULT_SETTINGS, ...(await db.get('settings', {})) };
+  const resumed = gdrive.resumeAfterRedirect();
 
   setupTabs();
   setupSecurity();
@@ -109,6 +110,14 @@ async function init() {
     resizeTimer = setTimeout(() => state.view === 'stats' && store.unlocked && renderStats(), 200);
   });
   renderAll();
+  if (resumed) {
+    if (resumed.error) toast(resumed.error);
+    else if (resumed.action === 'restore' && !store.hasVault) restoreFromDrive();
+    else if (resumed.action === 'sync') {
+      pendingSync = true; // đồng bộ ngay sau khi bạn mở khoá
+      toast('Đã đăng nhập Google — mở khoá để đồng bộ tiếp');
+    }
+  }
 
   // Chạy thử trên máy (localhost) thì không cache để luôn thấy code mới; thêm ?sw vào URL nếu muốn thử offline
   const dev = location.hostname === 'localhost' && !new URLSearchParams(location.search).has('sw');
@@ -1386,6 +1395,7 @@ async function importBackup(e) {
 
 const SYNC_EVERY = 6 * 3600_000;
 let syncing = false;
+let pendingSync = false;
 
 function ago(iso) {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60_000);
@@ -1441,9 +1451,13 @@ async function mergeRemote(remote) {
 async function syncNow({ auto = false } = {}) {
   if (syncing || !store.unlocked) return;
   syncing = true;
-  renderSyncCard('Đang đồng bộ…');
+  pendingSync = false;
+  renderSyncCard(gdrive.hasValidToken() || !gdrive.isStandalone() ? 'Đang đồng bộ…' : 'Đang chờ đăng nhập Google… đăng nhập xong hãy quay lại app.');
+  // Đăng nhập có thể mở tab Chrome riêng → đừng tự khoá app trong lúc đó
+  keepUnlockedUntil = Date.now() + 5 * 60_000;
   try {
-    await gdrive.getToken({ hint: state.meta.googleEmail });
+    await gdrive.getToken({ hint: state.meta.googleEmail, action: 'sync' });
+    renderSyncCard('Đang đồng bộ…');
     state.meta.googleEmail ??= await gdrive.whoAmI();
     let pulled = 0;
     let passChanged = false;
@@ -1473,14 +1487,21 @@ async function syncNow({ auto = false } = {}) {
 }
 
 function autoSyncAfterUnlock() {
+  if (pendingSync) return syncNow();
   const last = Date.parse(state.meta.lastSync || 0) || 0;
-  if (state.settings.autoSync && state.meta.googleEmail && Date.now() - last > SYNC_EVERY) syncNow({ auto: true });
+  if (!state.settings.autoSync || !state.meta.googleEmail || Date.now() - last <= SYNC_EVERY) return;
+  // App đã cài: đăng nhập phải mở tab Chrome — chỉ làm khi bạn bấm, không tự bật ra
+  if (gdrive.isStandalone() && !gdrive.hasValidToken()) {
+    return toast('Đến lúc đồng bộ Google Drive', { action: 'Đồng bộ', onAction: () => syncNow() });
+  }
+  syncNow({ auto: true });
 }
 
 // Máy mới: lấy kho khoá + dữ liệu từ Drive, rồi mở khoá bằng mật khẩu đã dùng ở máy kia
 async function restoreFromDrive() {
   try {
-    await gdrive.getToken();
+    if (!gdrive.hasValidToken() && gdrive.isStandalone()) toast('Đăng nhập Google xong hãy quay lại app');
+    await gdrive.getToken({ action: 'restore' });
     const file = await gdrive.findSyncFile();
     if (!file) return toast('Tài khoản Google này chưa có dữ liệu Coin Manager.');
     const data = await gdrive.downloadSyncFile(file.id);
