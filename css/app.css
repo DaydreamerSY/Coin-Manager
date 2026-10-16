@@ -522,3 +522,9 @@ body.capturing { padding-bottom: calc(var(--tabbar-h) + 62vh); }
 .kw-chip span { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); font-size: 11px; }
 .kw-add { display: flex; gap: 8px; margin: 10px 0 4px; }
 .kw-add input { flex: 1; }
+
+/* ----- Đồng bộ Google Drive ----- */
+.gate-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 700; margin-top: 6px; }
+.gate-or::before, .gate-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.google-btn { background: var(--surface); border: 2px solid var(--border); box-shadow: 0 3px 0 var(--border); min-height: 50px; }
+.sync-card #sync-info { margin: 0 0 4px; color: var(--ink-2); font-weight: 600; overflow-wrap: anywhere; }

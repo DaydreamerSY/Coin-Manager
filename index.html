@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' https://accounts.google.com/gsi/style 'sha256-RU4sU0AaS8IBGZx8XrGt/pa9A5SLA3dQszGeqT5L3Kw='; frame-src https://accounts.google.com/gsi/; img-src 'self' data: blob:; connect-src 'self' https://accounts.google.com/gsi/ https://www.googleapis.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FFC93C">
@@ -30,11 +30,11 @@
       <div class="gate-art" aria-hidden="true"><img src="icons/duck.svg" alt="" width="150" height="124"><span class="gate-badge">🔐</span></div>
       <h2>Bảo vệ dữ liệu bằng mật khẩu</h2>
       <ul class="gate-points">
-        <li>Mọi khoản chi được <b>mã hoá ngay trên máy</b> (AES-256) trước khi lưu. Không có gì gửi lên mạng.</li>
+        <li>Mọi khoản chi được <b>mã hoá ngay trên máy</b> (AES-256) trước khi lưu. Chỉ khi bạn bật đồng bộ Google Drive mới có dữ liệu gửi đi — và đó là bản đã mã hoá.</li>
         <li>Đang khoá vẫn <b>ghi bằng giọng nói được</b>, chỉ cần mật khẩu khi xem lại.</li>
         <li><b>Quên mật khẩu là mất dữ liệu.</b> Không ai khôi phục được, kể cả người viết app.</li>
       </ul>
-      <form id="setup-form" class="gate-form" autocomplete="on">
+      <form id="setup-form" class="gate-form" method="dialog" autocomplete="on">
         <input class="sr-only" type="text" name="username" autocomplete="username" value="Coin Manager" tabindex="-1" aria-hidden="true" readonly>
         <label>Mật khẩu <input name="pass" type="password" autocomplete="new-password" required></label>
         <label>Nhập lại <input name="pass2" type="password" autocomplete="new-password" required></label>
@@ -42,7 +42,9 @@
         <p class="form-error" role="alert"></p>
         <button class="btn primary" type="submit">Tạo mật khẩu &amp; bắt đầu</button>
       </form>
-      <p class="muted center">Đổi máy? <label class="link">Khôi phục từ bản sao lưu<input id="restore-file" type="file" accept=".json,application/json" hidden></label></p>
+      <div class="gate-or"><span>Đã dùng trên máy khác?</span></div>
+      <button id="restore-drive" class="btn google-btn" type="button">☁️ Lấy dữ liệu từ Google Drive</button>
+      <p class="muted center">hoặc <label class="link">khôi phục từ file sao lưu<input id="restore-file" type="file" accept=".json,application/json" hidden></label></p>
     </div>
   </section>
 
@@ -52,7 +54,7 @@
       <div class="gate-art" aria-hidden="true"><img src="icons/duck.svg" alt="" width="150" height="124"><span class="gate-badge">🔒</span></div>
       <h2>Đang khoá</h2>
       <p id="lock-msg" class="muted"></p>
-      <form id="unlock-form" class="gate-form" autocomplete="on">
+      <form id="unlock-form" class="gate-form" method="dialog" autocomplete="on">
         <input class="sr-only" type="text" name="username" autocomplete="username" value="Coin Manager" tabindex="-1" aria-hidden="true" readonly>
         <label>Mật khẩu <input name="pass" type="password" autocomplete="current-password" required></label>
         <p class="form-error" role="alert"></p>
@@ -76,7 +78,7 @@
 
     <p class="mic-hint">Bấm <span class="mic-hint-icon" aria-hidden="true">🎤</span> ở dưới rồi đọc các món kèm giá, ví dụ: <q>bánh hai lăm nước ngọt hai lăm rau hai lăm</q></p>
 
-    <form id="text-form" class="text-form" autocomplete="off">
+    <form id="text-form" class="text-form" method="dialog" autocomplete="off">
       <input id="text-input" type="text" enterkeyhint="done" placeholder="Hoặc gõ: bánh 25 nước ngọt 25" aria-label="Gõ khoản chi">
       <button class="btn" type="submit">Thêm</button>
     </form>
@@ -148,7 +150,7 @@
       <h2 class="card-title">Danh mục &amp; từ khoá</h2>
       <p class="muted">Chạm vào một danh mục, gõ từ khoá rồi bấm <b>Lưu</b> (nhiều từ thì cách nhau bằng dấu phẩy). Từ khoá dài hơn được ưu tiên; dài bằng nhau thì từ của bạn thắng từ có sẵn.</p>
       <div id="cat-settings"></div>
-      <form id="cat-add" class="cat-add" autocomplete="off">
+      <form id="cat-add" class="cat-add" method="dialog" autocomplete="off">
         <input name="icon" maxlength="4" placeholder="🐱" aria-label="Biểu tượng">
         <input name="name" required placeholder="Tên danh mục mới" aria-label="Tên danh mục mới">
         <select name="type" aria-label="Loại"><option value="expense">Chi</option><option value="income">Thu</option></select>
@@ -161,13 +163,24 @@
       <ul id="learned-list" class="learned-list"></ul>
     </section>
 
+    <section class="card sync-card">
+      <h2 class="card-title">☁️ Đồng bộ Google Drive</h2>
+      <p id="sync-info"></p>
+      <div class="btn-row">
+        <button id="sync-now" class="btn primary" type="button">Đồng bộ ngay</button>
+        <button id="sync-disconnect" class="btn ghost" type="button" hidden>Ngắt kết nối</button>
+      </div>
+      <label class="switch"><input id="set-autosync" type="checkbox"> <span>Tự đồng bộ khi mở khoá (tối đa 6 giờ một lần)</span></label>
+      <p class="muted hint">Dùng nhiều máy: mở app ở máy kia, chọn <b>Lấy dữ liệu từ Google Drive</b> rồi nhập cùng mật khẩu. App chỉ ghi vào thư mục ẩn riêng của nó trên Drive, và chỉ ghi <b>bản đã mã hoá</b> — Google không đọc được nội dung.</p>
+    </section>
+
     <section class="card">
       <h2 class="card-title">Dữ liệu</h2>
       <p id="data-info" class="muted"></p>
       <div class="btn-row">
         <button id="export-json" class="btn" type="button">Sao lưu (đã mã hoá)</button>
         <button id="export-csv" class="btn" type="button">Xuất Excel (CSV, không mã hoá)</button>
-        <label class="btn">Khôi phục từ file<input id="import-json" type="file" accept="application/json,.json" hidden></label>
+        <label class="btn">Gộp từ file<input id="import-json" type="file" accept="application/json,.json" hidden></label>
       </div>
       <button id="wipe" class="btn danger" type="button">Xoá toàn bộ dữ liệu…</button>
     </section>

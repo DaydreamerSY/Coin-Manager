@@ -5,6 +5,8 @@ import { store } from './store.js';
 import { passphraseIssues, WrongPassphrase } from './vault.js';
 import { createRecognizer, VOICE_ERRORS } from './voice.js';
 import { renderDailyColumns, renderDonut } from './charts.js';
+import { mergeRows, mergeProfile, isTomb } from './sync.js';
+import * as gdrive from './gdrive.js';
 import {
   fmtVND, fmtNum, fmtCompact, today, addDays, monthOf, shiftMonth, daysInMonth, monthLabel, dayLabel, escapeHtml, capitalize,
 } from './format.js';
@@ -14,13 +16,15 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const sum = list => list.reduce((s, t) => s + t.amount, 0);
 const esc = escapeHtml;
 
-const DEFAULT_SETTINGS = { slang: true, autoSave: false, lockAfter: 5 };
+const DEFAULT_SETTINGS = { slang: true, autoSave: false, lockAfter: 5, autoSync: true, googleConnected: false };
 const emptyCustom = () => ({ extraKeywords: {}, added: [] });
 
 const state = {
   // Dữ liệu nhạy cảm — chỉ có khi đã mở khoá, bị xoá khỏi bộ nhớ khi khoá
   txs: [],
+  tombs: [],              // dấu xoá { id, deleted, updatedAt } — để đồng bộ việc xoá giữa các máy
   custom: emptyCustom(),
+  customUpdatedAt: null,
   learned: {},
   meta: {},
   categories: buildCategories(),
@@ -65,15 +69,18 @@ const timeOf = iso => {
 
 function applyProfile(p) {
   state.custom = p?.custom ?? emptyCustom();
+  state.customUpdatedAt = p?.customUpdatedAt ?? null;
   state.learned = p?.learned ?? {};
   state.meta = p?.meta ?? {};
   state.categories = buildCategories(state.custom);
 }
 
-const saveProfile = () => store.saveProfile({ custom: state.custom, learned: state.learned, meta: state.meta });
+const profileNow = () => ({ custom: state.custom, customUpdatedAt: state.customUpdatedAt, learned: state.learned, meta: state.meta });
+const saveProfile = () => store.saveProfile(profileNow());
 
 function forgetSensitive() {
   state.txs = [];
+  state.tombs = [];
   applyProfile(null);
 }
 
@@ -236,6 +243,7 @@ function setupSecurity() {
     const f = e.target;
     setFormError(f, '');
     setBusy(f, true, 'Đang mở khoá…');
+    if (state.settings.googleConnected && state.settings.autoSync) gdrive.preload();
     try {
       await store.unlock(f.elements.pass.value);
     } catch (err) {
@@ -250,10 +258,13 @@ function setupSecurity() {
       setBusy(f, false);
     }
     renderAll();
+    autoSyncAfterUnlock();
   });
 
   $('#restore-file').addEventListener('click', () => { keepUnlockedUntil = Date.now() + 120_000; });
   $('#restore-file').addEventListener('change', restoreOnNewDevice);
+  $('#restore-drive').addEventListener('pointerdown', () => gdrive.preload());
+  $('#restore-drive').addEventListener('click', restoreFromDrive);
   $('#forgot-wipe').addEventListener('click', () => wipeEverything(
     'Xoá toàn bộ dữ liệu đã mã hoá trên máy này và tạo mật khẩu mới?\nKhông thể hoàn tác.',
   ));
@@ -296,7 +307,8 @@ function renderLock() {
 async function loadUnlockedData() {
   applyProfile(await store.loadProfile());
   const { txs, failed } = await store.loadTx();
-  state.txs = txs;
+  state.txs = txs.filter(t => !isTomb(t));
+  state.tombs = txs.filter(isTomb);
   const inbox = await ingestInbox();
   if (failed + inbox.failed) toast(`Bỏ qua ${failed + inbox.failed} khoản lỗi hoặc không hợp lệ`);
   else if (inbox.count) toast(`Đã thêm ${inbox.count} khoản ghi lúc đang khoá`);
@@ -333,6 +345,7 @@ function mergeTxs(list) {
 function lockNow() {
   if (!store.unlocked) return;
   store.lock();
+  gdrive.forgetToken();
   forgetSensitive();
   $$('dialog[open]').forEach(d => d.close());
   // Các tab đã xem vẫn còn số liệu trong DOM (chỉ bị ẩn) — xoá hẳn
@@ -358,6 +371,8 @@ function onVisibilityChange() {
 async function wipeEverything(message) {
   if (!confirm(message)) return;
   await store.wipe();
+  gdrive.forgetToken();
+  state.settings.googleConnected = false;
   await db.set('settings', state.settings);
   forgetSensitive();
   clearPreview();
@@ -672,9 +687,13 @@ async function learnFrom(txs) {
 }
 
 async function removeTx(ids) {
-  await store.deleteTx(ids);
+  // Không xoá hẳn: để lại dấu xoá (đã mã hoá) để máy khác cũng xoá khi đồng bộ
+  const now = new Date().toISOString();
+  const tombs = ids.map(id => ({ id, deleted: true, updatedAt: now }));
+  await store.putTx(tombs);
   const set = new Set(ids);
   state.txs = state.txs.filter(t => !set.has(t.id));
+  state.tombs = [...state.tombs.filter(t => !set.has(t.id)), ...tombs];
   renderTopbar();
   renderView(state.view);
   toast(`Đã xoá ${ids.length} khoản`);
@@ -1122,6 +1141,7 @@ function openEdit(id) {
 
 async function saveCustom() {
   state.categories = buildCategories(state.custom);
+  state.customUpdatedAt = new Date().toISOString();
   await saveProfile();
 }
 
@@ -1177,6 +1197,22 @@ function setupSettings() {
     renderSettings();
   });
 
+  $('#sync-now').addEventListener('click', () => syncNow());
+  $('#set-autosync').addEventListener('change', async e => {
+    state.settings.autoSync = e.target.checked;
+    await saveSettings();
+  });
+  $('#sync-disconnect').addEventListener('click', async () => {
+    if (!confirm('Ngắt kết nối Google Drive trên máy này? Dữ liệu (đã mã hoá) trên Drive vẫn còn.')) return;
+    gdrive.forgetToken({ revoke: true });
+    delete state.meta.googleEmail;
+    delete state.meta.lastSync;
+    state.settings.googleConnected = false;
+    await Promise.all([saveSettings(), saveProfile()]);
+    renderSyncCard();
+    toast('Đã ngắt kết nối Google Drive');
+  });
+
   $('#export-json').addEventListener('click', exportBackup);
   $('#export-csv').addEventListener('click', exportCsv);
   $('#import-json').addEventListener('click', () => { keepUnlockedUntil = Date.now() + 120_000; });
@@ -1226,6 +1262,8 @@ async function removeKeyword(id, word) {
 }
 
 async function renderSettings() {
+  renderSyncCard();
+  if (state.settings.googleConnected) gdrive.preload();
   $('#set-slang').checked = state.settings.slang;
   $('#set-autosave').checked = state.settings.autoSave;
   $('#set-lockafter').value = String(state.settings.lockAfter);
@@ -1250,10 +1288,11 @@ async function renderSettings() {
   }).join('') : '<li class="empty">Chưa có. Khi bạn đổi danh mục của một khoản, app sẽ nhớ ở đây.</li>';
 
   const persisted = await navigator.storage?.persisted?.();
-  const last = state.meta.lastBackup;
-  const days = last ? Math.floor((Date.now() - Date.parse(last)) / 864e5) : null;
+  // Đồng bộ Google Drive cũng là một bản sao lưu
+  const [last, via] = [[state.meta.lastBackup, 'file'], [state.meta.lastSync, 'Google Drive']]
+    .filter(([t]) => t).sort((x, y) => Date.parse(y[0]) - Date.parse(x[0]))[0] ?? [];
   $('#data-info').innerHTML = `${state.txs.length} khoản, mã hoá và lưu ngay trên máy này${persisted ? ' (đã khoá chống tự xoá)' : ''}.<br>
-    Sao lưu gần nhất: ${last ? (days === 0 ? 'hôm nay' : `${days} ngày trước`) : '<b>chưa sao lưu</b>'}.`;
+    Sao lưu gần nhất: ${last ? `${esc(ago(last))} (${via})` : '<b>chưa sao lưu</b>'}.`;
 }
 
 function download(filename, content, type) {
@@ -1329,20 +1368,132 @@ async function importBackup(e) {
     return toast('File không phải bản sao lưu của Coin Manager');
   }
 
-  const txs = result.txs.filter(isValidTx).map(finalizeInboxItem);
-  if (!confirm(`Khôi phục ${txs.length} khoản từ file? Khoản trùng sẽ được ghi đè, khoản khác giữ nguyên.`)) return;
-  await store.putTx(txs);
-  mergeTxs(txs);
-  const p = result.profile ?? {};
-  state.learned = { ...(p.learned ?? {}), ...state.learned };
-  const added = new Map([...(p.custom?.added ?? []), ...(state.custom.added ?? [])].map(c => [c.id, c]));
-  state.custom = {
-    extraKeywords: { ...(p.custom?.extraKeywords ?? {}), ...state.custom.extraKeywords },
-    added: [...added.values()],
-  };
-  await saveCustom();
+  const incoming = result.txs.filter(t => isValidTx(t) || isTomb(t)).map(t => (isTomb(t) ? t : finalizeInboxItem(t)));
+  if (!confirm(`Gộp ${incoming.length} khoản từ file? Cùng một khoản thì giữ bản sửa sau cùng.`)) return;
+  const { rows, pulledIds } = mergeRows([...state.txs, ...state.tombs], incoming);
+  await store.putTx(rows.filter(r => pulledIds.has(r.id)));
+  state.txs = rows.filter(r => !isTomb(r));
+  state.tombs = rows.filter(isTomb);
+  applyProfile(mergeProfile(profileNow(), result.profile ?? {}));
+  await saveProfile();
   renderAll();
-  toast(`Đã khôi phục ${txs.length} khoản${result.failed ? ` (${result.failed} khoản lỗi)` : ''}`);
+  toast(`Đã gộp ${pulledIds.size} thay đổi từ file${result.failed ? ` (${result.failed} khoản lỗi)` : ''}`);
+}
+
+// ---------- Đồng bộ Google Drive ----------
+// Drive giữ MỘT file đồng bộ = bản sao lưu đã mã hoá (kho khoá + từng khoản + dấu xoá + hồ sơ).
+// Mỗi lần đồng bộ: tải về → gộp (bản sửa sau cùng thắng) → ghi kết quả xuống máy → đẩy bản đã gộp lên.
+
+const SYNC_EVERY = 6 * 3600_000;
+let syncing = false;
+
+function ago(iso) {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (!(m >= 1)) return 'vừa xong';
+  if (m < 60) return `${m} phút trước`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} giờ trước`;
+  return `${Math.round(m / 1440)} ngày trước`;
+}
+
+function renderSyncCard(busy) {
+  const email = state.meta.googleEmail;
+  $('#sync-info').innerHTML = busy ? esc(busy) : email
+    ? `Đã kết nối <b>${esc(email)}</b> · đồng bộ lần cuối: ${state.meta.lastSync ? esc(ago(state.meta.lastSync)) : 'chưa'}.`
+    : 'Chưa kết nối. Bấm <b>Đồng bộ ngay</b> để đăng nhập Google và đưa dữ liệu (đã mã hoá) lên Drive.';
+  $('#sync-now').disabled = !!busy;
+  $('#sync-disconnect').hidden = !email;
+  $('#set-autosync').checked = state.settings.autoSync;
+}
+
+async function mergeRemote(remote) {
+  if (!store.isBackup(remote)) throw new Error('File trên Google Drive không đúng định dạng của Coin Manager.');
+  const local = store.vault;
+  const otherVault = remote.vault.id !== local.id;
+  // Máy này tạo mật khẩu riêng trước khi đồng bộ → hỏi mật khẩu của dữ liệu trên Drive rồi dùng chung kho khoá đó
+  const read = otherVault
+    ? await askPassphrase('Dữ liệu trên Google Drive dùng mật khẩu khác. Nhập mật khẩu đó để gộp — sau đó máy này dùng chung mật khẩu với Drive.',
+      pass => store.readBackup(remote, pass))
+    : await store.readBackup(remote);
+  if (!read) throw new Error('Đã huỷ đồng bộ.');
+
+  const remoteRows = read.txs.filter(t => isValidTx(t) || isTomb(t));
+  const { rows, pulledIds } = mergeRows([...state.txs, ...state.tombs], remoteRows);
+  let passChanged = false;
+  if (otherVault) {
+    await store.adoptVault(remote.vault, read.keys);
+    await store.putTx(rows); // mã hoá lại toàn bộ bằng khoá chung
+  } else {
+    const changed = v => Date.parse(v.changedAt || v.createdAt || 0) || 0;
+    if (changed(remote.vault) > changed(local)) {
+      await store.adoptVault(remote.vault); // mật khẩu đã đổi ở máy khác (vẫn cùng khoá dữ liệu)
+      passChanged = true;
+    }
+    await store.putTx(rows.filter(r => pulledIds.has(r.id)));
+  }
+  state.txs = rows.filter(r => !isTomb(r));
+  state.tombs = rows.filter(isTomb);
+  applyProfile(mergeProfile(profileNow(), read.profile ?? {}));
+  await saveProfile();
+  return { pulled: pulledIds.size, passChanged };
+}
+
+/** Phải gọi từ một lần bấm (Google cần thao tác người dùng để mở cửa sổ đăng nhập). */
+async function syncNow({ auto = false } = {}) {
+  if (syncing || !store.unlocked) return;
+  syncing = true;
+  renderSyncCard('Đang đồng bộ…');
+  try {
+    await gdrive.getToken({ hint: state.meta.googleEmail });
+    state.meta.googleEmail ??= await gdrive.whoAmI();
+    let pulled = 0;
+    let passChanged = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const file = await gdrive.findSyncFile();
+      if (file) ({ pulled, passChanged } = await mergeRemote(await gdrive.downloadSyncFile(file.id)));
+      // Máy khác vừa ghi trong lúc gộp → gộp lại một lần nữa rồi mới đẩy lên
+      const latest = file && attempt === 0 ? await gdrive.findSyncFile() : null;
+      if (latest && latest.modifiedTime !== file.modifiedTime) continue;
+      await gdrive.uploadSyncFile(await store.exportBackup(), file?.id);
+      break;
+    }
+    state.meta.lastSync = new Date().toISOString();
+    state.settings.googleConnected = true;
+    await Promise.all([saveProfile(), saveSettings()]);
+    renderTopbar();
+    renderView(state.view);
+    toast(passChanged ? 'Đã đồng bộ. Mật khẩu đã được đổi ở máy khác — lần sau mở khoá hãy dùng mật khẩu mới.'
+      : pulled ? `Đã đồng bộ · lấy về ${pulled} thay đổi từ máy khác` : 'Đã đồng bộ với Google Drive ☁️');
+  } catch (err) {
+    if (auto) toast('Chưa tự đồng bộ được', { action: 'Đồng bộ', onAction: () => syncNow() });
+    else toast(err.message);
+  } finally {
+    syncing = false;
+    if (state.view === 'settings') renderSyncCard();
+  }
+}
+
+function autoSyncAfterUnlock() {
+  const last = Date.parse(state.meta.lastSync || 0) || 0;
+  if (state.settings.autoSync && state.meta.googleEmail && Date.now() - last > SYNC_EVERY) syncNow({ auto: true });
+}
+
+// Máy mới: lấy kho khoá + dữ liệu từ Drive, rồi mở khoá bằng mật khẩu đã dùng ở máy kia
+async function restoreFromDrive() {
+  try {
+    await gdrive.getToken();
+    const file = await gdrive.findSyncFile();
+    if (!file) return toast('Tài khoản Google này chưa có dữ liệu Coin Manager.');
+    const data = await gdrive.downloadSyncFile(file.id);
+    if (!store.isBackup(data)) return toast('File trên Google Drive không đúng định dạng của Coin Manager.');
+    await store.restoreFresh(data);
+    state.settings.googleConnected = true;
+    await saveSettings();
+    renderTopbar();
+    showView('record', { gate: true });
+    toast('Đã tải dữ liệu từ Google Drive. Mở khoá bằng mật khẩu bạn dùng ở máy kia.');
+  } catch (err) {
+    toast(err.message);
+  }
 }
 
 // ---------- Thông báo ----------
