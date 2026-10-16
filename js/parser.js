@@ -17,6 +17,22 @@ const NUM_WORDS = new Set(['mười', 'mươi', 'chục', 'trăm', 'linh', 'lẻ
 const CURRENCY = new Set(['đ', 'đồng', 'vnd', 'vnđ', '₫']);
 const CONNECTORS = new Set([',', 'và', 'với', 'thêm', 'còn', 'rồi', 'xong', 'cộng', 'tiếp']);
 const TRAILING_FILLERS = new Set(['hết', 'là', 'giá', 'mất', 'tốn', 'có', 'khoảng', 'tầm', 'chừng', 'thì', 'được', 'nhé', 'nha', 'ạ']);
+// Lượng từ / đơn vị đo: số đứng ngay trước là SỐ LƯỢNG, không phải tiền ("bánh mì hai ổ", "cà phê 2 ly")
+const CLASSIFIERS = new Set([
+  'cái', 'chiếc', 'con', 'ổ', 'ly', 'cốc', 'chai', 'lon', 'hộp', 'gói', 'bịch', 'túi', 'thùng', 'két', 'lốc', 'khay',
+  'vỉ', 'hũ', 'lọ', 'tuýp', 'cuộn', 'cây', 'bó', 'nải', 'quả', 'trái', 'củ', 'cục', 'viên', 'miếng', 'lát', 'tấm',
+  'kg', 'ký', 'kí', 'cân', 'lạng', 'gam', 'gram', 'g', 'ml', 'lít', 'mét', 'm', 'cm', 'km',
+  'phần', 'suất', 'món', 'tô', 'bát', 'chén', 'đĩa', 'dĩa', 'que', 'xiên', 'cặp', 'đôi', 'bộ', 'tờ', 'quyển', 'cuốn', 'vé',
+  'người', 'ngày', 'tháng', 'đêm', 'giờ', 'tiếng', 'phút', 'lần', 'buổi', 'tuần', 'size', 'phòng', 'căn',
+]);
+// Từ chỉ số nhưng đi với từ phía sau thành cụm thường: "năm mới", "ba mẹ", "tư nhân", "một chút"
+const NOT_AMOUNT_BEFORE = {
+  'năm': new Set(['mới', 'nay', 'ngoái', 'trước', 'sau', 'học', 'rồi']),
+  'ba': new Set(['mẹ', 'má', 'me']),
+  'tư': new Set(['nhân', 'vấn', 'duy']),
+  'một': new Set(['chút', 'ít', 'mình', 'lúc', 'số']),
+  'chín': new Set(['chắn', 'muồi']),
+};
 
 const DATE_PHRASES = [
   ['hôm kia', -2], ['bữa kia', -2],
@@ -132,7 +148,9 @@ export function parseNumber(t, slang = true) {
   let right = 0;
   if (R.length) {
     const rHasScale = R.some(x => scaleOf(x, slang));
-    if (rHasScale && !(t[at].w in SCALE)) return null; // "hai lít năm mươi nghìn": lít không đi kèm nghìn
+    // Tiếng lóng chỉ đi với "rưỡi" hoặc một chữ số ("hai lít rưỡi", "một củ hai"). Còn lại là số lượng:
+    // "xăng 2 lít 50" = 2 lít xăng giá 50k, "hai lít năm mươi nghìn" cũng vậy.
+    if (!(t[at].w in SCALE) && !(R.length === 1 && (isRuoi(R[0]) || digitOf(R[0]) != null))) return null;
     if (R.length === 1 && isRuoi(R[0])) {
       right = S / 2;                                    // "hai triệu rưỡi"
     } else if (R.length === 1 && digitOf(R[0]) != null) {
@@ -181,11 +199,16 @@ function bestPhrase(toks, a, b, slang) {
     const amount = amountOf(span, slang);
     if (amount == null) continue;
     const next = toks[b];
+    const text = span.map(x => x.w).join(' ');
     const hasStdScale = span.some(x => x.w in SCALE);
     const atBoundary = !next || CONNECTORS.has(next.w) || CURRENCY.has(next.w);
-    // "bánh mì hai ổ ...": số không có đơn vị mà đứng giữa câu là số lượng, không phải tiền
-    if (!hasStdScale && !atBoundary) return null;
-    return { start: s, end: b, amount, text: span.map(x => x.w).join(' ') };
+    if (hasStdScale || atBoundary) return { start: s, end: b, amount, text, soft: false };
+    // Không nói đơn vị mà đứng giữa câu: mặc định là giá, ngăn cách các món ("bánh 25 nước ngọt 25 rau 25"),
+    // trừ khi là số lượng ("hai ổ", "3 ly", "một chục trứng"), tiếng lóng ("hai củ khoai") hay cụm từ ("năm mới")
+    const last = span.at(-1).w;
+    if (span.some(x => x.w in SLANG_SCALE) || CLASSIFIERS.has(next.w) || last === 'chục'
+      || NOT_AMOUNT_BEFORE[last]?.has(next.w)) return null;
+    return { start: s, end: b, amount, text, soft: true };
   }
   return null;
 }
@@ -239,6 +262,8 @@ export function parseUtterance(text, { slang = true } = {}) {
     if (p) phrases.push(p);
     i = j;
   }
+  // "hai bánh mì ba mươi": số đứng đầu câu không đơn vị mà phía sau còn giá khác → là số lượng
+  if (phrases.length > 1 && phrases[0].start === 0 && phrases[0].soft) phrases.shift();
   if (!phrases.length) return { items: [], dateOffset, type };
 
   // "mười lăm nghìn bánh mì" — nói số tiền trước, tên sau

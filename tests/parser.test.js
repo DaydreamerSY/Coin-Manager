@@ -61,6 +61,28 @@ const CASES = [
   ['bánh mì heo quay', []],
   ['banh mi 15k', [['banh mi', 15000, 'an-uong']]],
   ['sửa máy giặt ba trăm nghìn', [['sửa máy giặt', 300000, null]]], // không được khớp nhầm "sữa"
+
+  // Đọc nhiều món liền nhau, không nói đơn vị — giá là dấu ngăn cách
+  ['bánh hai lăm nước ngọt hai lăm rau hai lăm', [['bánh', 25000, 'an-uong'], ['nước ngọt', 25000, 'do-uong'], ['rau', 25000, 'di-cho']]],
+  ['bánh 25 nước ngọt 25 rau 25', [['bánh', 25000], ['nước ngọt', 25000], ['rau', 25000]]],
+  ['siêu thị 100', [['siêu thị', 100000, 'di-cho']]],
+  ['siêu thị một trăm', [['siêu thị', 100000]]],
+  ['phở bò năm lăm cà phê hai mươi', [['phở bò', 55000], ['cà phê', 20000]]],
+  ['cơm tấm ba lăm trà đá năm', [['cơm tấm', 35000], ['trà đá', 5000]]],
+  ['bánh 25.000 nước ngọt 25.000', [['bánh', 25000], ['nước ngọt', 25000]]],
+  // ...nhưng số lượng / cụm từ thường không bị nhầm là giá
+  ['hai bánh mì ba mươi', [['hai bánh mì', 30000]]],
+  ['ba lăm bánh mì', [['bánh mì', 35000]]],
+  ['cà phê 2 ly 50', [['cà phê 2 ly', 50000]]],
+  ['bánh bao hai cái hai mươi', [['bánh bao hai cái', 20000]]],
+  ['mua thêm một chục trứng ba mươi', [['mua thêm một chục trứng', 30000]]],
+  ['xăng 2 lít 50', [['xăng 2 lít', 50000, 'di-chuyen']]],
+  ['quà năm mới hai trăm', [['quà năm mới', 200000]]],
+  ['quà cho ba mẹ năm trăm', [['quà cho ba mẹ', 500000, 'gia-dinh']]],
+  ['gym 3 tháng 1 triệu', [['gym 3 tháng', 1000000, 'suc-khoe']]],
+  ['vé xem phim 2 người 180', [['vé xem phim 2 người', 180000, 'giai-tri']]],
+  ['tiền điện tháng 9 500', [['tiền điện tháng 9', 500000, 'hoa-don']]],
+  ['7 up 10', [['7 up', 10000]]],
 ];
 
 const AMOUNT_CASES = [

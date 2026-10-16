@@ -39,11 +39,27 @@ const FIXED_CATEGORIES = new Set(['nha-o', 'hoa-don']);
 
 const catById = id => state.categories.find(c => c.id === id) ?? state.categories.find(c => c.id === 'khac');
 
-function categoryOptions(selected) {
+/** onlyType: chỉ liệt kê danh mục cùng loại (dùng cho các món trong một hoá đơn). */
+function categoryOptions(selected, onlyType) {
   const group = (type, label) => `<optgroup label="${label}">${state.categories.filter(c => c.type === type)
     .map(c => `<option value="${esc(c.id)}"${c.id === selected ? ' selected' : ''}>${esc(c.icon)} ${esc(c.name)}</option>`).join('')}</optgroup>`;
+  if (onlyType) return group(onlyType, onlyType === 'income' ? 'Thu' : 'Chi');
   return group('expense', 'Chi') + group('income', 'Thu');
 }
+
+// Một hoá đơn đã chia = các món + phần còn lại (tính vào danh mục của hoá đơn). Thống kê dùng từng phần.
+function partsOf(t) {
+  const splits = t.splits ?? [];
+  const parts = splits.map(s => ({ name: s.name, amount: s.amount, category: s.category }));
+  const rest = t.amount - sum(splits);
+  if (rest > 0 || !splits.length) parts.push({ name: t.name, amount: splits.length ? rest : t.amount, category: t.category });
+  return parts;
+}
+
+const timeOf = iso => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 
 // ---------- Hồ sơ (danh mục tự thêm, phần đã học...) — lưu dạng mã hoá ----------
 
@@ -87,7 +103,9 @@ async function init() {
   });
   renderAll();
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // Chạy thử trên máy (localhost) thì không cache để luôn thấy code mới; thêm ?sw vào URL nếu muốn thử offline
+  const dev = location.hostname === 'localhost' && !new URLSearchParams(location.search).has('sw');
+  if ('serviceWorker' in navigator && !dev) navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
 function onGlobalClick(e) {
@@ -318,9 +336,10 @@ function lockNow() {
   forgetSensitive();
   $$('dialog[open]').forEach(d => d.close());
   // Các tab đã xem vẫn còn số liệu trong DOM (chỉ bị ẩn) — xoá hẳn
-  for (const sel of ['#hist-list', '#hist-summary', '#stats-body', '#today-list', '#cat-settings', '#learned-list', '#data-info']) {
+  for (const sel of ['#hist-list', '#hist-summary', '#stats-body', '#today-list', '#cat-settings', '#learned-list', '#data-info', '#split-list', '#split-rest']) {
     $(sel).replaceChildren();
   }
+  editSplits = [];
   $$('form').forEach(f => f.reset());
   state.histQ = '';
   renderAll();
@@ -645,31 +664,52 @@ async function removeTx(ids) {
   toast(`Đã xoá ${ids.length} khoản`);
 }
 
-function txItem(t, { showDate = false } = {}) {
+function txItem(t, { showDate = false, timeline = false } = {}) {
   const c = catById(t.category);
   const sign = t.type === 'income' ? '+' : '−';
   const sub = showDate ? `${dayLabel(t.date)} · ${c.name}` : c.name;
-  return `<li><button type="button" class="tx" data-id="${esc(t.id)}">
+  const splits = t.splits?.length
+    ? `<span class="tx-splits">${t.splits.map(s => `${esc(s.name)} ${fmtCompact(s.amount)}`).join(' · ')}</span>` : '';
+  const btn = `<button type="button" class="tx tint-${c.tint}" data-id="${esc(t.id)}">
     <span class="tx-icon" aria-hidden="true">${esc(c.icon)}</span>
-    <span class="tx-main"><span class="tx-name">${esc(t.name)}</span><span class="tx-sub">${esc(sub)}</span></span>
+    <span class="tx-main"><span class="tx-name">${esc(t.name)}</span><span class="tx-sub">${esc(sub)}</span>${splits}</span>
     <span class="tx-amt ${t.type === 'income' ? 'income' : 'expense'}">${sign}${fmtVND(t.amount)}</span>
-  </button></li>`;
+  </button>`;
+  return timeline ? `<li class="tl"><span class="tl-time">${timeOf(t.createdAt)}</span>${btn}</li>` : `<li>${btn}</li>`;
+}
+
+function renderSummary() {
+  const ym = monthOf(today());
+  const label = `tháng ${Number(ym.slice(5))}`;
+  $('#sum-exp-label').textContent = `Chi ${label}`;
+  $('#sum-inc-label').textContent = `Thu ${label}`;
+  if (!store.unlocked) {
+    $('#sum-exp').textContent = '🔒';
+    $('#sum-inc').textContent = '🔒';
+    return;
+  }
+  const month = state.txs.filter(t => monthOf(t.date) === ym);
+  $('#sum-exp').textContent = fmtVND(sum(month.filter(t => t.type === 'expense')));
+  $('#sum-inc').textContent = fmtVND(sum(month.filter(t => t.type === 'income')));
 }
 
 async function renderToday() {
+  renderSummary();
   if (!store.unlocked) {
     $('#today-total').textContent = '';
     const n = store.hasVault ? await store.inboxCount() : 0;
     $('#today-list').innerHTML = `<li class="locked-note">
       <span>🔒 Dữ liệu đang khoá — bạn vẫn ghi được, nhưng cần mật khẩu để xem.${n ? ` Có <b>${n}</b> khoản mới ghi đang chờ.` : ''}</span>
-      <button type="button" class="btn" data-unlock>Mở khoá</button></li>`;
+      <button type="button" class="btn primary" data-unlock>Mở khoá</button></li>`;
     return;
   }
   const t = today();
   const list = state.txs.filter(x => x.date === t).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const spent = sum(list.filter(x => x.type === 'expense'));
   $('#today-total').textContent = list.length ? `đã chi ${fmtVND(spent)}` : '';
-  $('#today-list').innerHTML = list.length ? list.map(x => txItem(x)).join('') : '<li class="empty">Chưa có khoản nào hôm nay.</li>';
+  $('#today-list').innerHTML = list.length
+    ? list.map(x => txItem(x, { timeline: true })).join('')
+    : '<li class="empty">🦆 Chưa có khoản nào hôm nay. Bấm micro và nói thử nhé!</li>';
 }
 
 // ---------- Lịch sử ----------
@@ -684,15 +724,25 @@ function renderHistory() {
   $('#hist-cat').innerHTML = `<option value="">Tất cả danh mục</option>${categoryOptions(state.histCat)}`;
   $('#hist-cat').value = state.histCat;
   const q = normalize(state.histQ);
+  const cat = state.histCat;
+  const names = t => [t.name, ...(t.splits ?? []).map(s => s.name)];
   const list = state.txs
-    .filter(t => monthOf(t.date) === state.month && (!state.histCat || t.category === state.histCat) && (!q || normalize(t.name).includes(q)))
+    .filter(t => monthOf(t.date) === state.month
+      && (!cat || partsOf(t).some(p => p.category === cat))
+      && (!q || names(t).some(n => normalize(n).includes(q))))
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 
-  const spent = sum(list.filter(t => t.type === 'expense'));
-  const earned = sum(list.filter(t => t.type === 'income'));
-  $('#hist-summary').textContent = list.length
-    ? `${list.length} khoản · chi ${fmtVND(spent)}${earned ? ` · thu ${fmtVND(earned)}` : ''}`
-    : '';
+  if (cat) {
+    // Lọc theo danh mục: chỉ cộng phần thuộc danh mục đó (một hoá đơn có thể chia cho nhiều danh mục)
+    const inCat = sum(list.flatMap(partsOf).filter(p => p.category === cat));
+    $('#hist-summary').textContent = list.length ? `${list.length} khoản · ${fmtVND(inCat)} thuộc ${catById(cat).name}` : '';
+  } else {
+    const spent = sum(list.filter(t => t.type === 'expense'));
+    const earned = sum(list.filter(t => t.type === 'income'));
+    $('#hist-summary').textContent = list.length
+      ? `${list.length} khoản · chi ${fmtVND(spent)}${earned ? ` · thu ${fmtVND(earned)}` : ''}`
+      : '';
+  }
 
   const groups = new Map();
   for (const t of list) groups.set(t.date, [...(groups.get(t.date) ?? []), t]);
@@ -700,9 +750,9 @@ function renderHistory() {
     const daySpent = sum(items.filter(t => t.type === 'expense'));
     return `<section class="card day-group">
       <h3 class="card-title"><span>${dayLabel(date)}</span><span class="muted">${daySpent ? `−${fmtVND(daySpent)}` : ''}</span></h3>
-      <ul class="tx-list">${items.map(t => txItem(t)).join('')}</ul>
+      <ul class="tx-list timeline">${items.map(t => txItem(t, { timeline: true })).join('')}</ul>
     </section>`;
-  }).join('') : '<p class="empty card">Không có khoản nào.</p>';
+  }).join('') : '<p class="empty card">🦆 Không có khoản nào.</p>';
 }
 
 // ---------- Thống kê ----------
@@ -736,8 +786,10 @@ function renderStats() {
       ${up ? 'nhiều hơn' : pct < 0 ? 'ít hơn' : 'bằng'} ${isCurrent ? 'cùng kỳ tháng trước' : 'tháng trước'} (${fmtCompact(prevSpent)})</span>`;
   }
 
+  // Hoá đơn đã chia: mỗi món tính vào danh mục riêng, phần còn lại vào danh mục của hoá đơn
+  const parts = exp.flatMap(partsOf);
   const byCat = new Map();
-  for (const x of exp) {
+  for (const x of parts) {
     const e = byCat.get(x.category) ?? { sum: 0, count: 0 };
     e.sum += x.amount; e.count += 1;
     byCat.set(x.category, e);
@@ -746,7 +798,7 @@ function renderStats() {
   const maxCat = cats[0]?.[1].sum || 1;
 
   const freq = new Map();
-  for (const x of exp) {
+  for (const x of parts) {
     const k = normalize(x.name);
     const e = freq.get(k) ?? { name: x.name, sum: 0, count: 0 };
     e.sum += x.amount; e.count += 1;
@@ -759,6 +811,7 @@ function renderStats() {
   body.innerHTML = `
     <div class="kpis">
       <div class="kpi hero">
+        <img class="duck-peek" src="icons/duck-peek.svg" alt="" width="96" height="67">
         <span class="kpi-label">Đã chi ${isCurrent ? 'tháng này' : monthLabel(ym).toLowerCase()}</span>
         <span class="kpi-value">${fmtVND(spent)}</span>
         ${delta}
@@ -772,8 +825,9 @@ function renderStats() {
       <h2 class="card-title">Chi theo danh mục</h2>
       ${cats.length ? `<ul class="cat-bars">${cats.map(([id, e]) => {
         const c = catById(id);
-        return `<li><button type="button" class="cat-bar-row" data-goto-cat="${esc(id)}" title="Xem ${e.count} khoản">
-          <span class="cb-label"><span aria-hidden="true">${esc(c.icon)}</span> ${esc(c.name)}</span>
+        return `<li><button type="button" class="cat-bar-row tint-${c.tint}" data-goto-cat="${esc(id)}" title="Xem ${e.count} khoản">
+          <span class="cat-tile" aria-hidden="true">${esc(c.icon)}</span>
+          <span class="cb-label">${esc(c.name)}</span>
           <span class="cb-value">${fmtVND(e.sum)} <small>${Math.round((e.sum / spent) * 100)}%</small></span>
           <span class="cb-track"><span class="cb-fill" data-w="${Math.max(1, (e.sum / maxCat) * 100)}"></span></span>
         </button></li>`;
@@ -807,60 +861,222 @@ function renderStats() {
   $$('.cb-fill', body).forEach(el => { el.style.width = `${el.dataset.w}%`; });
 
   const dim = daysInMonth(ym);
-  const dailySrc = state.dailyAll ? exp : exp.filter(x => !FIXED_CATEGORIES.has(x.category));
+  const dailyParts = exp.flatMap(x => partsOf(x).map(p => ({ ...p, date: x.date, id: x.id })))
+    .filter(p => state.dailyAll || !FIXED_CATEGORIES.has(p.category));
   const daily = Array.from({ length: dim }, (_, i) => {
     const iso = `${ym}-${String(i + 1).padStart(2, '0')}`;
-    const items = dailySrc.filter(x => x.date === iso);
-    return { label: String(i + 1), title: dayLabel(iso), value: sum(items), count: items.length, isToday: iso === t };
+    const items = dailyParts.filter(x => x.date === iso);
+    return { label: String(i + 1), title: dayLabel(iso), value: sum(items), count: new Set(items.map(x => x.id)).size, isToday: iso === t };
   });
   renderDailyColumns($('#daily-chart'), daily);
 }
 
 // ---------- Sửa / xoá ----------
 
+// Các món của hoá đơn đang sửa — chỉ ghi xuống khi bấm Lưu
+let editSplits = [];
+let splitRec = null;
+
+const editForm = () => $('#edit-form');
+const editTotal = () => parseAmount(editForm().elements.amount.value, { slang: state.settings.slang }) ?? 0;
+const editParent = () => catById(editForm().elements.category.value);
+
+function renderSplits() {
+  const type = editParent().type;
+  $('#split-list').innerHTML = editSplits.map((s, i) => {
+    const c = catById(s.category);
+    return `<li class="split-item tint-${c.tint}" data-i="${i}">
+      <span class="tx-icon" aria-hidden="true">${esc(c.icon)}</span>
+      <input data-sf="name" value="${esc(s.name)}" placeholder="Tên món" aria-label="Tên món">
+      <span class="amount-field"><input data-sf="amount" value="${s.amount ? fmtNum(s.amount) : ''}" placeholder="Giá" aria-label="Giá món"><span>đ</span></span>
+      <select data-sf="category" aria-label="Danh mục của món">${categoryOptions(s.category, type)}</select>
+      <button type="button" class="icon-btn split-del" data-i="${i}" aria-label="Bỏ món này">✕</button>
+    </li>`;
+  }).join('');
+  renderSplitRest();
+}
+
+function renderSplitRest() {
+  const el = $('#split-rest');
+  el.className = 'split-rest';
+  if (!editSplits.length) {
+    el.innerHTML = '<span class="muted">Chưa chia. Ví dụ hoá đơn siêu thị 100k → nói <q>bánh 25 nước ngọt 25 rau 25</q>.</span>';
+    return;
+  }
+  const used = sum(editSplits.filter(s => s.amount > 0));
+  const rest = editTotal() - used;
+  if (rest > 0) {
+    el.innerHTML = `Còn lại <b>${fmtVND(rest)}</b> → tính vào ${esc(editParent().icon)} ${esc(editParent().name)}`;
+  } else if (rest === 0) {
+    el.classList.add('done');
+    el.textContent = '✓ Đã chia hết';
+  } else {
+    el.classList.add('over');
+    el.innerHTML = `Các món vượt tổng ${fmtVND(-rest)} <button type="button" class="btn" data-fix-total="${used}">Đặt tổng = ${fmtVND(used)}</button>`;
+  }
+}
+
+/** Thêm món từ câu nói/gõ, ví dụ "bánh 25 nước ngọt 25 rau 25". */
+function addSplits(alts) {
+  const status = $('#split-status');
+  const parsed = alts.map(t => parseUtterance(t, { slang: state.settings.slang })).find(r => r.items.length);
+  if (!parsed) {
+    status.hidden = false;
+    status.textContent = 'Chưa nghe ra giá. Đọc kiểu: bánh 25 nước ngọt 25.';
+    return false;
+  }
+  const parent = editParent();
+  for (const it of parsed.items) {
+    // Món không đoán được danh mục thì để chung danh mục với hoá đơn
+    let c = classify(it.name, state.categories, state.learned);
+    if (!c || catById(c).type !== parent.type) c = parent.id;
+    editSplits.push({ id: crypto.randomUUID(), name: capitalize(it.name) || `Món ${editSplits.length + 1}`, amount: it.amount, category: c });
+  }
+  status.hidden = true;
+  renderSplits();
+  return true;
+}
+
 function setupEditDialog() {
   const dlg = $('#edit-dialog');
-  const f = $('#edit-form');
+  const f = editForm();
   f.addEventListener('submit', async e => {
     if (e.submitter?.value !== 'save') return;
-    const amount = parseAmount(f.elements.amount.value, { slang: state.settings.slang });
+    const amount = editTotal();
     if (!amount) {
       e.preventDefault();
       f.elements.amount.setCustomValidity('Số tiền chưa hợp lệ');
       f.elements.amount.reportValidity();
       return;
     }
+    const splits = editSplits.filter(s => s.name.trim() || s.amount > 0);
+    if (splits.some(s => !(s.amount > 0))) {
+      e.preventDefault();
+      return toast('Có món chưa có giá');
+    }
+    if (sum(splits) > amount) {
+      e.preventDefault();
+      renderSplitRest();
+      return toast('Các món cộng lại vượt tổng tiền');
+    }
     const t = state.txs.find(x => x.id === f.dataset.id);
     if (!t || !store.unlocked) return;
-    const cat = catById(f.elements.category.value);
+    const cat = editParent();
+    const clean = splits.map(s => ({
+      id: s.id, name: capitalize(s.name.trim()) || 'Món', amount: s.amount,
+      category: catById(s.category).type === cat.type ? catById(s.category).id : cat.id,
+    }));
     Object.assign(t, {
       name: capitalize(f.elements.name.value.trim()), amount, category: cat.id, type: cat.type,
       date: f.elements.date.value, updatedAt: new Date().toISOString(),
     });
+    if (clean.length) t.splits = clean;
+    else delete t.splits;
     await store.putTx([t]);
-    await learnFrom([t]);
+    await learnFrom([t, ...clean.map(s => ({ name: s.name, category: s.category, type: cat.type }))]);
     renderTopbar();
     renderView(state.view);
-    toast('Đã cập nhật');
+    toast(clean.length ? `Đã lưu, chia ${clean.length} món` : 'Đã cập nhật');
   });
-  f.elements.amount.addEventListener('input', () => f.elements.amount.setCustomValidity(''));
+  f.elements.amount.addEventListener('input', () => {
+    f.elements.amount.setCustomValidity('');
+    renderSplitRest();
+  });
+  f.elements.category.addEventListener('change', () => {
+    // Đổi giữa Chi/Thu: món khác loại chuyển theo danh mục của hoá đơn
+    const parent = editParent();
+    editSplits.forEach(s => { if (catById(s.category).type !== parent.type) s.category = parent.id; });
+    renderSplits();
+  });
   $('#edit-delete').addEventListener('click', async () => {
     if (!confirm('Xoá khoản này?')) return;
     dlg.close();
     await removeTx([f.dataset.id]);
   });
+
+  // ----- Chia nhỏ hoá đơn -----
+  const input = $('#split-input');
+  const status = $('#split-status');
+  const addFromInput = () => { if (input.value.trim() && addSplits([input.value.trim()])) input.value = ''; };
+  $('#split-add-btn').addEventListener('click', addFromInput);
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault(); // Enter trong form sẽ bấm "Lưu"
+    addFromInput();
+  });
+
+  const list = $('#split-list');
+  const onSplitEdit = e => {
+    const row = e.target.closest('.split-item');
+    const field = e.target.dataset.sf;
+    if (!row || !field) return;
+    const s = editSplits[Number(row.dataset.i)];
+    if (field === 'amount') {
+      s.amount = parseAmount(e.target.value, { slang: state.settings.slang }) ?? 0;
+      if (e.type === 'change' && s.amount) e.target.value = fmtNum(s.amount);
+      renderSplitRest();
+    } else if (field === 'category') {
+      s.category = e.target.value;
+      if (e.type === 'change') renderSplits();
+    } else {
+      s.name = e.target.value;
+    }
+  };
+  list.addEventListener('input', onSplitEdit);
+  list.addEventListener('change', onSplitEdit);
+  list.addEventListener('click', e => {
+    const del = e.target.closest('.split-del');
+    if (!del) return;
+    editSplits.splice(Number(del.dataset.i), 1);
+    renderSplits();
+  });
+  $('#split-rest').addEventListener('click', e => {
+    const fix = e.target.closest('[data-fix-total]');
+    if (!fix) return;
+    f.elements.amount.value = fmtNum(Number(fix.dataset.fixTotal));
+    renderSplitRest();
+  });
+
+  const mic = $('#split-mic');
+  splitRec = createRecognizer({
+    onInterim: t => { status.hidden = false; status.textContent = `“${t}”`; },
+    onFinal: alts => addSplits(alts),
+    onError: err => {
+      if (VOICE_ERRORS[err] === '') return;
+      status.hidden = false;
+      status.textContent = VOICE_ERRORS[err] ?? `Lỗi nhận giọng nói: ${err}`;
+    },
+    onEnd: () => mic.classList.remove('listening'),
+  });
+  if (!splitRec) mic.hidden = true;
+  mic.addEventListener('click', () => {
+    if (splitRec.listening) return splitRec.stop();
+    try {
+      splitRec.start();
+      mic.classList.add('listening');
+      status.hidden = false;
+      status.textContent = 'Đang nghe… đọc các món kèm giá';
+    } catch {
+      status.textContent = 'Không mở được micro, thử lại nhé.';
+    }
+  });
+  dlg.addEventListener('close', () => { if (splitRec?.listening) splitRec.stop(); });
 }
 
 function openEdit(id) {
   const t = state.txs.find(x => x.id === id);
   if (!t) return;
-  const f = $('#edit-form');
+  const f = editForm();
   f.dataset.id = id;
   f.elements.name.value = t.name;
   f.elements.amount.value = fmtNum(t.amount);
   f.elements.category.innerHTML = categoryOptions(t.category);
   f.elements.date.value = t.date;
   $('#edit-raw').textContent = t.raw ? `Câu gốc: “${t.raw}”` : '';
+  editSplits = (t.splits ?? []).map(s => ({ ...s }));
+  $('#split-input').value = '';
+  $('#split-status').hidden = true;
+  renderSplits();
   $('#edit-dialog').showModal();
 }
 
@@ -973,13 +1189,18 @@ function exportCsv() {
   if (!confirm('File CSV KHÔNG được mã hoá — ai có file cũng đọc được. Vẫn xuất?')) return;
   // Chặn công thức Excel trong tên (=, +, -, @)
   const q = v => `"${String(v ?? '').replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"`;
-  const rows = [...state.txs].sort((a, b) => a.date.localeCompare(b.date))
-    .map(t => [t.date, q(t.name), t.type === 'income' ? t.amount : -t.amount, t.type === 'income' ? 'Thu' : 'Chi', q(catById(t.category).name), q(t.raw)].join(','));
-  download(`coin-manager-${today()}.csv`, `﻿Ngày,Tên,Số tiền,Loại,Danh mục,Câu nói\n${rows.join('\n')}`, 'text/csv');
+  // Mỗi món của hoá đơn đã chia là một dòng, cột "Hoá đơn" cho biết thuộc khoản nào
+  const rows = [...state.txs].sort((a, b) => a.date.localeCompare(b.date)).flatMap(t => partsOf(t).map(p => [
+    t.date, q(t.name), q(p.name), t.type === 'income' ? p.amount : -p.amount, t.type === 'income' ? 'Thu' : 'Chi',
+    q(catById(p.category).name), q(t.raw),
+  ].join(',')));
+  download(`coin-manager-${today()}.csv`, `﻿Ngày,Hoá đơn,Món,Số tiền,Loại,Danh mục,Câu nói\n${rows.join('\n')}`, 'text/csv');
 }
 
+const isValidSplit = s => s && typeof s.name === 'string' && Number.isFinite(s.amount) && s.amount > 0 && typeof s.category === 'string';
 const isValidTx = t => t && typeof t.id === 'string' && typeof t.name === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date)
-  && Number.isFinite(t.amount) && t.amount > 0 && (t.type === 'income' || t.type === 'expense') && typeof t.category === 'string';
+  && Number.isFinite(t.amount) && t.amount > 0 && (t.type === 'income' || t.type === 'expense') && typeof t.category === 'string'
+  && (t.splits === undefined || (Array.isArray(t.splits) && t.splits.every(isValidSplit) && sum(t.splits) <= t.amount));
 
 async function readFileJson(input) {
   const file = input.files[0];

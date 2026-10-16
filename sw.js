@@ -3,16 +3,19 @@
 //
 // Mọi trang *.github.io của cùng một tài khoản dùng chung kho cache — chỉ đụng tới cache có tiền tố của app này.
 const PREFIX = 'coin-manager-';
-const CACHE = `${PREFIX}v1`;
+const CACHE = `${PREFIX}v2`;
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/parser.js', './js/categories.js', './js/db.js', './js/store.js', './js/vault.js',
   './js/voice.js', './js/charts.js', './js/format.js',
-  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
+  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/duck.svg', './icons/duck-peek.svg',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' — lấy thẳng từ server, không dùng bản cũ trong HTTP cache của trình duyệt
+  e.waitUntil(caches.open(CACHE)
+    .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
