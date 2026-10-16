@@ -3,7 +3,7 @@
 // bạn bấm đồng bộ; quyền truy cập (sống ~1 giờ) chỉ giữ trong bộ nhớ, không lưu xuống trình duyệt.
 // File trên Drive là bản sao lưu ĐÃ MÃ HOÁ — Google không đọc được nội dung.
 
-const CLIENT_ID = '427368913266-vgvnqeoq2rakfl0ecmu3f5o1o301p15r.apps.googleusercontent.com';
+const CLIENT_ID = '427368913266-13117203mqq82vf7ov99vlasn4jejgnf.apps.googleusercontent.com';
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const FILE_NAME = 'coin-manager-sync.json';
 const API = 'https://www.googleapis.com';
