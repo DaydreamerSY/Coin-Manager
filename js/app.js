@@ -4,7 +4,7 @@ import { db } from './db.js';
 import { store } from './store.js';
 import { passphraseIssues, WrongPassphrase } from './vault.js';
 import { createRecognizer, VOICE_ERRORS } from './voice.js';
-import { renderDailyColumns } from './charts.js';
+import { renderDailyColumns, renderDonut } from './charts.js';
 import {
   fmtVND, fmtNum, fmtCompact, today, addDays, monthOf, shiftMonth, daysInMonth, monthLabel, dayLabel, escapeHtml, capitalize,
 } from './format.js';
@@ -404,7 +404,13 @@ let gotResult = false;
 let autoSaveTimer = null;
 let batchSeq = 0;
 
-const DEFAULT_STATUS = $('#mic-status').innerHTML;
+const DEFAULT_STATUS = 'Đọc các món kèm giá, ví dụ <q>bánh 25 nước ngọt 25</q>';
+
+// Bảng ghi nhanh nổi ngay trên nút micro (trong tầm ngón cái), dùng được ở mọi tab
+function showCapture(on) {
+  $('#capture').hidden = !on;
+  document.body.classList.toggle('capturing', on);
+}
 
 function setMicStatus(html, isError = false) {
   const el = $('#mic-status');
@@ -428,13 +434,14 @@ function setupRecord() {
     onEnd: () => {
       mic.classList.remove('listening');
       mic.setAttribute('aria-label', 'Bấm để nói');
-      if (!gotResult) setMicStatus(DEFAULT_STATUS);
+      // Không nghe được gì và chưa có gì chờ lưu → đóng bảng
+      if (!gotResult && !state.preview) showCapture(false);
     },
   });
 
   if (!recognizer) {
     mic.disabled = true;
-    setMicStatus('Trình duyệt này không hỗ trợ nhận giọng nói. Hãy mở bằng <b>Chrome trên Android</b>, hoặc gõ tay bên dưới.', true);
+    $('.mic-hint').innerHTML = 'Trình duyệt này không hỗ trợ nhận giọng nói. Hãy mở bằng <b>Chrome trên Android</b>, hoặc gõ tay bên dưới.';
   }
   mic.addEventListener('click', () => {
     if (recognizer.listening) return recognizer.stop();
@@ -444,9 +451,10 @@ function setupRecord() {
       recognizer.start();
       mic.classList.add('listening');
       mic.setAttribute('aria-label', 'Bấm để dừng');
-      setMicStatus('Đang nghe… nói tên khoản rồi số tiền');
+      setMicStatus('🎤 Đang nghe… đọc tên món rồi giá');
       showTranscript('', true);
       $('#alts').hidden = true;
+      showCapture(true);
     } catch {
       setMicStatus('Không mở được micro, thử lại nhé.', true);
     }
@@ -472,6 +480,11 @@ function setupRecord() {
     state.preview.items.length ? renderPreview() : clearPreview();
   });
   $('#pv-cancel').addEventListener('click', clearPreview);
+  $('#cap-close').addEventListener('click', () => {
+    if (recognizer?.listening) recognizer.stop();
+    clearPreview();
+    showCapture(false);
+  });
   $('#pv-save').addEventListener('click', savePreview);
 }
 
@@ -490,13 +503,14 @@ function handleAlternatives(alts, source) {
   const parsed = alts.filter(t => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
     .map(t => ({ t, r: parseUtterance(t, opts) }));
   const best = parsed.find(p => p.r.items.length) ?? parsed[0];
+  showCapture(true);
   showTranscript(best.t, false);
 
   if (!best.r.items.length) {
     setMicStatus('Chưa nghe ra số tiền. Thử nói kèm đơn vị, ví dụ <q>mười lăm nghìn</q>.', true);
     return;
   }
-  setMicStatus(source === 'voice' ? 'Kiểm tra lại rồi bấm <b>Lưu</b>' : DEFAULT_STATUS);
+  setMicStatus('Kiểm tra lại rồi bấm <b>Lưu</b>');
 
   // Câu mới được thêm vào phần đang chờ lưu, không ghi đè
   const batch = ++batchSeq;
@@ -596,6 +610,7 @@ function clearPreview() {
   $('#preview').hidden = true;
   $('#alts').hidden = true;
   showTranscript('', false);
+  if (!recognizer?.listening) showCapture(false);
 }
 
 async function savePreview() {
@@ -629,7 +644,8 @@ async function savePreview() {
     await learnFrom(txs);
     renderTopbar();
   }
-  renderToday();
+  // Có thể ghi từ tab bất kỳ → vẽ lại đúng tab đang xem
+  renderView(state.view);
   navigator.storage?.persist?.();
   const ids = txs.map(t => t.id);
   toast(`Đã lưu ${txs.length > 1 ? `${txs.length} khoản · ` : ''}${fmtVND(sum(txs))}${unlocked ? '' : ' (đã mã hoá)'}`, {
@@ -757,6 +773,22 @@ function renderHistory() {
 
 // ---------- Thống kê ----------
 
+// Donut tối đa 6 phần (khuyến nghị dataviz: nhiều hơn thì khó so bằng mắt):
+// 5 danh mục lớn nhất + "Khác" gộp phần còn lại (kể cả danh mục Khác có sẵn để không bị hai chữ "Khác")
+const DONUT_MAX = 6;
+function donutSlices(cats) {
+  const slice = ([id, e], i) => ({ label: catById(id).name, icon: catById(id).icon, value: e.sum, color: id === 'khac' ? 'other' : String(i) });
+  if (cats.length <= DONUT_MAX) {
+    let k = 0;
+    return cats.map(([id, e]) => slice([id, e], id === 'khac' ? 0 : k++));
+  }
+  const top = cats.filter(([id]) => id !== 'khac').slice(0, DONUT_MAX - 1);
+  const rest = cats.filter(x => !top.includes(x));
+  return [...top.map(slice), {
+    label: 'Khác', icon: '📦', value: rest.reduce((t, [, e]) => t + e.sum, 0), color: 'other', note: `${rest.length} mục`,
+  }];
+}
+
 function renderStats() {
   renderMonthNavs();
   const ym = state.month;
@@ -822,6 +854,11 @@ function renderStats() {
     </div>
 
     <section class="card">
+      <h2 class="card-title">Tỉ lệ chi tiêu</h2>
+      <div id="donut-chart" class="donut"></div>
+    </section>
+
+    <section class="card">
       <h2 class="card-title">Chi theo danh mục</h2>
       ${cats.length ? `<ul class="cat-bars">${cats.map(([id, e]) => {
         const c = catById(id);
@@ -869,6 +906,7 @@ function renderStats() {
     return { label: String(i + 1), title: dayLabel(iso), value: sum(items), count: new Set(items.map(x => x.id)).size, isToday: iso === t };
   });
   renderDailyColumns($('#daily-chart'), daily);
+  if (cats.length) renderDonut($('#donut-chart'), donutSlices(cats), spent);
 }
 
 // ---------- Sửa / xoá ----------
@@ -1102,13 +1140,19 @@ function setupSettings() {
   });
   $('#lock-now').addEventListener('click', lockNow);
 
-  $('#cat-settings').addEventListener('change', async e => {
-    const ta = e.target.closest('textarea[data-cat]');
-    if (!ta) return;
-    const words = ta.value.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
-    state.custom.extraKeywords = { ...state.custom.extraKeywords, [ta.dataset.cat]: words };
-    await saveCustom();
-    toast('Đã lưu từ khoá');
+  const cs = $('#cat-settings');
+  cs.addEventListener('click', e => {
+    const add = e.target.closest('[data-kw-add]');
+    if (add) return addKeywords(add.dataset.kwAdd);
+    const del = e.target.closest('[data-kw-del]');
+    if (del) removeKeyword(del.dataset.kwDel, del.dataset.kw);
+  });
+  cs.addEventListener('keydown', e => {
+    const input = e.target.closest('[data-kw-input]');
+    if (input && e.key === 'Enter') {
+      e.preventDefault();
+      addKeywords(input.dataset.kwInput);
+    }
   });
 
   $('#cat-add').addEventListener('submit', async e => {
@@ -1142,17 +1186,60 @@ function setupSettings() {
   ));
 }
 
+function kwChips(id) {
+  const words = state.custom.extraKeywords?.[id] ?? [];
+  return words.length
+    ? words.map(w => `<button type="button" class="kw-chip" data-kw-del="${esc(id)}" data-kw="${esc(w)}" aria-label="Xoá từ khoá ${esc(w)}">${esc(w)}<span aria-hidden="true">✕</span></button>`).join('')
+    : '<span class="muted">Chưa có từ khoá riêng.</span>';
+}
+
+function refreshKeywords(id) {
+  const set = [...$$('[data-cat-set]')].find(d => d.dataset.catSet === id);
+  if (!set) return;
+  const c = catById(id);
+  set.querySelector('.kw-chips').innerHTML = kwChips(id);
+  set.querySelector('.kw-count').textContent = `· ${c.type === 'income' ? 'thu' : 'chi'} · ${c.kw.length} từ khoá`;
+}
+
+async function addKeywords(id) {
+  const input = [...$$('[data-kw-input]')].find(i => i.dataset.kwInput === id);
+  const words = (input?.value ?? '').split(/[,\n]/).map(w => w.trim()).filter(Boolean);
+  if (!words.length) {
+    input?.focus();
+    return toast('Gõ từ khoá trước rồi bấm Lưu');
+  }
+  const known = new Set(catById(id).kw.map(x => x.k));
+  const fresh = [...new Set(words.filter(w => !known.has(normalize(w))))];
+  if (!fresh.length) return toast('Từ khoá này đã có trong danh mục');
+  state.custom.extraKeywords = { ...state.custom.extraKeywords, [id]: [...(state.custom.extraKeywords?.[id] ?? []), ...fresh] };
+  await saveCustom();
+  input.value = '';
+  refreshKeywords(id);
+  toast(`Đã lưu ${fresh.map(w => `“${w}”`).join(', ')} cho ${catById(id).name}`);
+}
+
+async function removeKeyword(id, word) {
+  state.custom.extraKeywords = { ...state.custom.extraKeywords, [id]: (state.custom.extraKeywords?.[id] ?? []).filter(w => w !== word) };
+  await saveCustom();
+  refreshKeywords(id);
+  toast(`Đã xoá “${word}”`);
+}
+
 async function renderSettings() {
   $('#set-slang').checked = state.settings.slang;
   $('#set-autosave').checked = state.settings.autoSave;
   $('#set-lockafter').value = String(state.settings.lockAfter);
 
-  const extra = state.custom.extraKeywords ?? {};
   $('#cat-settings').innerHTML = state.categories.map(c => `
-    <details class="cat-set">
-      <summary><span aria-hidden="true">${esc(c.icon)}</span> ${esc(c.name)} <span class="muted">· ${c.type === 'income' ? 'thu' : 'chi'} · ${c.kw.length} từ khoá</span></summary>
-      ${c.keywords?.length ? `<p class="muted kw-default">${esc(c.keywords.join(', '))}</p>` : ''}
-      <textarea data-cat="${esc(c.id)}" rows="2" placeholder="Từ khoá của bạn, cách nhau bằng dấu phẩy">${esc((extra[c.id] ?? []).join(', '))}</textarea>
+    <details class="cat-set" data-cat-set="${esc(c.id)}">
+      <summary><span aria-hidden="true">${esc(c.icon)}</span> ${esc(c.name)} <span class="muted kw-count">· ${c.type === 'income' ? 'thu' : 'chi'} · ${c.kw.length} từ khoá</span></summary>
+      <p class="kw-label">Từ khoá của bạn <span class="muted">(ưu tiên hơn từ có sẵn)</span></p>
+      <div class="kw-chips">${kwChips(c.id)}</div>
+      <div class="kw-add">
+        <input type="text" data-kw-input="${esc(c.id)}" enterkeyhint="done" autocomplete="off" placeholder="Ví dụ: bánh flan, sữa đặc" aria-label="Thêm từ khoá cho ${esc(c.name)}">
+        <button type="button" class="btn primary" data-kw-add="${esc(c.id)}">Lưu</button>
+      </div>
+      ${c.keywords?.length ? `<p class="muted kw-default"><b>Có sẵn:</b> ${esc(c.keywords.join(', '))}</p>` : ''}
     </details>`).join('');
 
   const learned = Object.entries(state.learned).sort((a, b) => a[0].localeCompare(b[0], 'vi'));

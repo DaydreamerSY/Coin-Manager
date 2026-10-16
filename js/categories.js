@@ -78,7 +78,7 @@ export function normalize(s) {
 }
 
 export function stripAccents(s) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').normalize('NFC');
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').normalize('NFC');
 }
 
 export const TINT_COUNT = 14;
@@ -93,8 +93,13 @@ function tintFor(id) {
 export function buildCategories(custom = {}) {
   const extra = custom.extraKeywords ?? {};
   return [...DEFAULT_CATEGORIES, ...(custom.added ?? [])].map(c => {
-    const kws = [...new Set([...(c.keywords ?? []), ...(extra[c.id] ?? [])].map(normalize).filter(Boolean))];
-    return { ...c, tint: Number.isInteger(c.tint) && c.tint >= 0 && c.tint < TINT_COUNT ? c.tint : tintFor(c.id), kw: kws.map(k => ({ k, plain: stripAccents(k) })) };
+    const user = new Set((extra[c.id] ?? []).map(normalize).filter(Boolean));
+    const kws = [...new Set([...(c.keywords ?? []).map(normalize).filter(Boolean), ...user])];
+    return {
+      ...c,
+      tint: Number.isInteger(c.tint) && c.tint >= 0 && c.tint < TINT_COUNT ? c.tint : tintFor(c.id),
+      kw: kws.map(k => ({ k, plain: stripAccents(k), user: user.has(k) })),
+    };
   });
 }
 
@@ -111,11 +116,15 @@ export function classify(name, categories, learned = {}) {
   const n = normalize(name);
   if (!n) return null;
   if (learned[n]) return learned[n];
-  // Cụm đã học đứng trước nên thắng khi dài bằng từ khoá
-  const entries = [...Object.entries(learned), ...categories.flatMap(c => c.kw.map(({ k }) => [k, c.id]))];
-  const hit = longestMatch(` ${n} `, entries);
+  // Khi dài bằng nhau, thứ tự ưu tiên: cụm đã học → từ khoá bạn tự thêm → từ khoá có sẵn
+  // ("bánh" bạn thêm cho Đi chợ phải thắng "bánh" có sẵn của Ăn uống)
+  const ordered = key => [
+    ...categories.flatMap(c => c.kw.filter(x => x.user).map(x => [x[key], c.id])),
+    ...categories.flatMap(c => c.kw.filter(x => !x.user).map(x => [x[key], c.id])),
+  ];
+  const hit = longestMatch(` ${n} `, [...Object.entries(learned), ...ordered('k')]);
   // Gõ không dấu ("banh mi") vẫn khớp được. Chỉ áp dụng khi cả câu không dấu,
   // nếu không "sửa máy giặt" sẽ khớp nhầm "sữa".
   if (hit || stripAccents(n) !== n) return hit;
-  return longestMatch(` ${n} `, categories.flatMap(c => c.kw.map(({ plain }) => [plain, c.id])));
+  return longestMatch(` ${n} `, ordered('plain'));
 }
