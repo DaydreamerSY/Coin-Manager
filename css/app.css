@@ -528,3 +528,31 @@ body.capturing { padding-bottom: calc(var(--tabbar-h) + 62vh); }
 .gate-or::before, .gate-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .google-btn { background: var(--surface); border: 2px solid var(--border); box-shadow: 0 3px 0 var(--border); min-height: 50px; }
 .sync-card #sync-info { margin: 0 0 4px; color: var(--ink-2); font-weight: 600; overflow-wrap: anywhere; }
+
+/* ----- Menu chọn (select) theo theme vịt — Chrome 135+ cho phép tô cả danh sách xổ xuống;
+         trình duyệt chưa hỗ trợ vẫn dùng menu mặc định ----- */
+@supports (appearance: base-select) {
+  select, ::picker(select) { appearance: base-select; }
+  select { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  select::picker-icon { flex: none; margin-inline-start: auto; }
+  select::picker-icon { content: "▾"; color: var(--ink-2); transition: rotate .15s; }
+  select:open::picker-icon { rotate: 180deg; }
+  select:open { border-color: var(--duck); background: var(--surface); }
+  ::picker(select) {
+    border: 1px solid var(--border); border-radius: 18px; padding: 6px; margin-block: 6px;
+    background: var(--surface); color: var(--ink);
+    box-shadow: 0 14px 40px rgba(80, 50, 10, .22);
+    max-height: min(60vh, 440px); overflow-y: auto;
+  }
+  select optgroup { font-size: 12px; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px 2px; }
+  select option {
+    display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 12px; border-radius: 12px;
+    font-size: 15px; font-weight: 600; color: var(--ink); text-transform: none; letter-spacing: 0;
+  }
+  select option:hover, select option:focus-visible { background: var(--surface-2); outline: none; }
+  select option:checked { background: var(--duck-soft); font-weight: 800; }
+  select option::checkmark { content: "✓"; order: 1; margin-inline-start: auto; color: var(--duck-deep); font-weight: 900; }
+}
+@media (prefers-color-scheme: dark) {
+  @supports (appearance: base-select) { ::picker(select) { box-shadow: 0 14px 40px rgba(0, 0, 0, .5); } }
+}

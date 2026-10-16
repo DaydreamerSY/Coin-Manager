@@ -3,11 +3,11 @@
 //
 // Mọi trang *.github.io của cùng một tài khoản dùng chung kho cache — chỉ đụng tới cache có tiền tố của app này.
 const PREFIX = 'coin-manager-';
-const CACHE = `${PREFIX}v4`;
+const CACHE = `${PREFIX}v5`;
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/parser.js', './js/categories.js', './js/db.js', './js/store.js', './js/vault.js',
-  './js/voice.js', './js/charts.js', './js/format.js', './js/sync.js', './js/gdrive.js',
+  './js/voice.js', './js/charts.js', './js/format.js', './js/sync.js', './js/gdrive.js', './js/oauth.js', './oauth.html',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/duck.svg', './icons/duck-peek.svg',
   './fonts/nunito-latin.woff2', './fonts/nunito-latin-ext.woff2', './fonts/nunito-vietnamese.woff2',
 ];
