@@ -1,7 +1,8 @@
 import { runParserTests } from './parser.test.js';
 import { runVaultTests } from './vault.test.js';
+import { runSyncTests } from './sync.test.js';
 
-const results = [...runParserTests()];
+const results = [...runParserTests(), ...runSyncTests()];
 try {
   results.push(...await runVaultTests());
 } catch (e) {

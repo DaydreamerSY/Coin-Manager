@@ -31,6 +31,7 @@ export const store = {
   async init() { vault = await db.get('vault', null); },
   get hasVault() { return !!vault; },
   get unlocked() { return !!keys; },
+  get vault() { return vault; },
 
   async setup(pass) {
     const r = await V.createVault(pass);
@@ -107,7 +108,16 @@ export const store = {
     const tx = await decryptRows(k, data.tx);
     const inbox = await decryptRows(k, data.inbox ?? []);
     const profile = data.profile ? await V.decryptJson(k.dek, 'profile', data.profile).catch(() => null) : null;
-    return { txs: [...tx.items, ...inbox.items], failed: tx.failed + inbox.failed, profile };
+    return { txs: [...tx.items, ...inbox.items], failed: tx.failed + inbox.failed, profile, keys: k };
+  },
+  /**
+   * Dùng kho khoá khác (từ Drive). Có newKeys = khác hẳn mật khẩu/khoá → nhớ gọi putTx/saveProfile để mã hoá lại;
+   * không có newKeys = cùng khoá dữ liệu, chỉ đổi lớp bọc (mật khẩu đã đổi ở máy khác).
+   */
+  async adoptVault(newVault, newKeys) {
+    await db.set('vault', newVault);
+    vault = newVault;
+    if (newKeys) keys = newKeys;
   },
 
   async wipe() {

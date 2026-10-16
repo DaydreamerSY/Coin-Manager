@@ -82,7 +82,8 @@ khoá công khai ECDH (để dạng thường) ─► ghi khoản mới khi đan
 - **Đang khoá vẫn ghi bằng giọng nói được.** Khoản mới được mã hoá một chiều bằng khoá công khai; chỉ khi nhập mật khẩu mới đọc được và được gộp vào sổ.
 - Khoá chỉ nằm trong bộ nhớ khi app đang mở và **tự khoá** khi bạn rời app quá thời gian chọn trong Cài đặt (mặc định 5 phút). Khi khoá, dữ liệu đã giải mã bị xoá khỏi bộ nhớ và màn hình.
 - Bàn phím tiếng Việt gõ dấu kiểu dựng sẵn hay tổ hợp đều ra cùng một mật khẩu (chuẩn hoá NFC).
-- Chính sách CSP chỉ cho chạy script của chính app; không tải gì từ bên ngoài.
+- Chính sách CSP chỉ cho chạy script của chính app, cộng đúng thư viện đăng nhập của Google (`accounts.google.com/gsi/client`) — thư viện này chỉ được tải khi bạn dùng đồng bộ Google Drive.
+- Các form không bao giờ tự gửi đi (kể cả khi bấm lúc app chưa tải xong), nên mật khẩu không thể lọt lên thanh địa chỉ.
 
 **Vì sao cần mã hoá dù dữ liệu chỉ nằm trên máy:** mọi trang GitHub Pages của cùng một tài khoản (`daydreamersy.github.io/...`) dùng **chung một origin**, nên trang khác của bạn (hoặc code bị chèn vào trang đó) đọc được IndexedDB của Coin Manager. Mã hoá khiến thứ đọc được chỉ là bản mã.
 
@@ -93,6 +94,16 @@ khoá công khai ECDH (để dạng thường) ─► ghi khoản mới khi đan
 - Mật khẩu yếu có thể bị dò nếu ai đó lấy được bản mã. App chặn mật khẩu < 8 ký tự và dãy số ngắn; một câu ngắn chỉ bạn biết là tốt nhất.
 - Số lượng khoản và kích thước xấp xỉ mỗi khoản vẫn nhìn thấy được (nội dung thì không).
 - Đổi mật khẩu chỉ bọc lại khoá: **bản sao lưu cũ vẫn mở được bằng mật khẩu cũ**.
+
+## Đồng bộ Google Drive (nhiều thiết bị)
+
+**Cài đặt → ☁️ Đồng bộ Google Drive → Đồng bộ ngay.** Lần đầu đăng nhập Google và cho phép app lưu vào Drive.
+
+- App chỉ dùng **thư mục ẩn riêng của app** trên Drive (quyền `drive.appdata`) — không thấy trong Drive của bạn, không đụng tới file nào khác — và chỉ ghi **một file bản sao lưu đã mã hoá**. Google không đọc được nội dung.
+- **Thêm máy mới:** mở app → *Lấy dữ liệu từ Google Drive* → mở khoá bằng cùng mật khẩu. Nếu máy đó lỡ tạo mật khẩu riêng rồi, bấm đồng bộ sẽ hỏi mật khẩu của dữ liệu trên Drive, gộp lại, và từ đó máy đó dùng chung mật khẩu.
+- **Gộp:** cùng một khoản thì bản sửa sau cùng thắng; khoản xoá ở máy này cũng bị xoá ở máy kia (app lưu "dấu xoá" đã mã hoá). Đổi mật khẩu ở một máy → máy kia nhận mật khẩu mới ở lần đồng bộ sau.
+- **Tự đồng bộ khi mở khoá** (tối đa 6 giờ một lần). Không có máy chủ nên quyền Google chỉ sống ~1 giờ và phải có một lần bấm để xin lại — khi mở khoá có thể chớp một cửa sổ Google rồi tự đóng.
+- Ngắt kết nối: *Ngắt kết nối* trong Cài đặt. Muốn xoá hẳn dữ liệu trên Drive: Google Drive → Cài đặt → Quản lý ứng dụng.
 
 ## Sao lưu
 
@@ -127,6 +138,8 @@ js/parser.js           đọc số tiền tiếng Việt + tách nhiều khoản
 js/categories.js       danh mục, từ khoá, phân loại + ghi nhớ
 js/vault.js            mã hoá: PBKDF2, AES-GCM, ECIES (Web Crypto, không thư viện)
 js/store.js            lưu trữ đã mã hoá, hộp chờ, sao lưu
+js/sync.js             gộp dữ liệu giữa các máy (bản sửa sau thắng, dấu xoá)
+js/gdrive.js           đăng nhập Google + thư mục ẩn của app trên Drive
 js/db.js               IndexedDB thô
 js/app.js              điều khiển giao diện, khoá/mở khoá, thống kê
 js/voice.js            Web Speech API (vi-VN)
