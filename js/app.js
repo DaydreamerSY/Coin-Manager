@@ -8,6 +8,7 @@ import { renderDailyColumns, renderDonut } from './charts.js';
 import { mergeRows, mergeProfile, isTomb } from './sync.js';
 import * as gdrive from './gdrive.js';
 import { enhanceDateInputs } from './datepicker.js';
+import { openLayer, watchDialogs } from './sheets.js';
 import { dueRecurring, nextDue, startYmFor, activeRules, nextYm, ymOf } from './recurring.js';
 import {
   fmtVND, fmtNum, fmtCompact, today, addDays, monthOf, shiftMonth, daysInMonth, monthLabel, dayLabel, escapeHtml, capitalize,
@@ -111,6 +112,11 @@ async function init() {
   setupEditDialog();
   setupCalc();
   enhanceDateInputs();
+  watchDialogs();
+  // Back đóng bảng đang mở → về mục lịch sử cũ; giữ địa chỉ đúng tab đang xem (để tải lại không nhảy tab)
+  window.addEventListener('popstate', () => {
+    if (location.hash !== `#${state.view}`) history.replaceState(history.state, '', `#${state.view}`);
+  });
   document.addEventListener('click', onGlobalClick);
   document.addEventListener('visibilitychange', onVisibilityChange);
   let resizeTimer;
@@ -186,7 +192,8 @@ function showView(name, { gate = false } = {}) {
   $$('.view').forEach(v => { v.hidden = v.dataset.view !== shown; });
   $('.tabbar').hidden = !store.hasVault;
   $$('[data-tab]').forEach(b => b.toggleAttribute('aria-current', b.dataset.tab === name));
-  history.replaceState(null, '', `#${name}`);
+  history.replaceState(history.state, '', `#${name}`); // giữ state: có thể đang là mục của một lớp (nút Back)
+  syncSelectLayer();
   renderView(shown);
   window.scrollTo(0, 0);
 }
@@ -457,9 +464,17 @@ let batchSeq = 0;
 const DEFAULT_STATUS = 'Đọc các món kèm giá, ví dụ <q>bánh 25 nước ngọt 25</q>';
 
 // Bảng ghi nhanh nổi ngay trên nút micro (trong tầm ngón cái), dùng được ở mọi tab
+let captureLayer = null;
+
 function showCapture(on) {
   $('#capture').hidden = !on;
   document.body.classList.toggle('capturing', on);
+  // Back = bấm ✕
+  if (on && !captureLayer) captureLayer = openLayer(() => $('#cap-close').click());
+  else if (!on && captureLayer) {
+    captureLayer();
+    captureLayer = null;
+  }
 }
 
 function setMicStatus(html, isError = false) {
@@ -1604,6 +1619,17 @@ function renderSelection() {
     ? (mixed ? 'Không gộp chung khoản chi với khoản thu' : `Đã chọn ${items.length} · ${fmtVND(sum(items))}`)
     : 'Chạm vào các khoản muốn gộp';
   $('#merge-go').disabled = items.length < 2 || mixed;
+  syncSelectLayer();
+}
+
+// Back khi đang chọn để gộp = thôi chọn
+let selectLayer = null;
+function syncSelectLayer() {
+  if (state.selecting && !selectLayer) selectLayer = openLayer(stopSelecting);
+  else if (!state.selecting && selectLayer) {
+    selectLayer();
+    selectLayer = null;
+  }
 }
 
 let mergeItems = [];
