@@ -21,7 +21,7 @@ function label(iso) {
 function ensureDialog() {
   if (dlg) return dlg;
   dlg = document.createElement('dialog');
-  dlg.className = 'date-dialog';
+  dlg.className = 'sheet date-dialog';
   dlg.setAttribute('aria-label', 'Chọn ngày');
   dlg.innerHTML = `
     <div class="dp-head">

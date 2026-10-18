@@ -139,6 +139,8 @@ Dữ liệu chỉ nằm trong Chrome trên điện thoại. Xoá dữ liệu Chr
 
 Mở <https://daydreamersy.github.io/Coin-Manager/> bằng Chrome → menu ⋮ → *Thêm vào màn hình chính* / *Cài đặt ứng dụng*. Lần đầu bấm micro, Chrome sẽ hỏi quyền dùng micro.
 
+Dùng như app điện thoại: nút **Back** đóng hộp thoại / bảng ghi nhanh / chế độ chọn để gộp (không thoát app); các bảng trượt từ dưới lên **vuốt xuống để đóng**.
+
 **Cập nhật:** `git push` lên nhánh `main`. App trên điện thoại tải bản mới ở nền, **lần mở kế tiếp** sẽ dùng bản mới.
 
 ## Chạy thử trên máy tính
@@ -164,7 +166,10 @@ js/gdrive.js           đăng nhập Google + thư mục ẩn của app trên Dr
 js/db.js               IndexedDB thô
 js/app.js              điều khiển giao diện, khoá/mở khoá, thống kê
 js/voice.js            Web Speech API (vi-VN)
-js/charts.js           biểu đồ cột theo ngày (SVG, không thư viện)
+js/charts.js           biểu đồ cột theo ngày, donut tỉ lệ (SVG, không thư viện)
+js/recurring.js        khoản cố định hằng tháng (tính ngày tới hạn, ghi bù)
+js/datepicker.js       lịch chọn ngày theo theme
+js/sheets.js           nút Back đóng hộp thoại, vuốt xuống để đóng bảng
 icons/duck*.svg        linh vật vịt (vẽ tay bằng SVG)
 fonts/                 Nunito (SIL OFL 1.1, xem fonts/OFL.txt) — tự host, không tải từ Google
 sw.js                  chạy offline
