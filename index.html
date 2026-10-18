@@ -84,7 +84,7 @@
     </form>
 
     <section class="card">
-      <h2 class="card-title"><span>Hôm nay</span><span id="today-total" class="muted"></span></h2>
+      <h2 class="card-title"><span>Hôm nay</span><span class="title-right"><span id="today-total" class="muted"></span><button id="today-merge" class="btn chip-btn" type="button" hidden>☑️ Gộp</button></span></h2>
       <ul id="today-list" class="tx-list timeline"></ul>
     </section>
 
@@ -110,7 +110,10 @@
       <input id="hist-q" type="search" placeholder="Tìm theo tên…" aria-label="Tìm theo tên">
       <select id="hist-cat" aria-label="Lọc danh mục"></select>
     </div>
-    <p id="hist-summary" class="muted"></p>
+    <div class="hist-tools">
+      <p id="hist-summary" class="muted"></p>
+      <button id="select-btn" class="btn chip-btn" type="button">☑️ Gộp khoản</button>
+    </div>
     <div id="hist-list"></div>
   </section>
 
@@ -218,7 +221,7 @@
     <h2>Sửa khoản</h2>
     <label>Tên <input name="name" required></label>
     <div class="row-2">
-      <label>Tổng tiền <input name="amount" inputmode="numeric" required></label>
+      <label>Tổng tiền <span class="amount-field"><input name="amount" autocomplete="off" required><span>đ</span><button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button></span></label>
       <label>Ngày <input name="date" type="date" required></label>
     </div>
     <label>Danh mục <select name="category"></select></label>
@@ -273,6 +276,61 @@
       <button class="btn primary" value="ok">Mở</button>
     </div>
   </form>
+</dialog>
+
+<!-- Thanh chọn để gộp (nổi trên thanh tab) -->
+<div id="merge-bar" class="merge-bar" hidden>
+  <span id="merge-count" class="merge-count"></span>
+  <button id="merge-cancel" class="btn ghost" type="button">Huỷ</button>
+  <button id="merge-go" class="btn primary" type="button">Gộp</button>
+</div>
+
+<dialog id="merge-dialog" class="sheet">
+  <form id="merge-form" method="dialog">
+    <h2>Gộp thành một hoá đơn</h2>
+    <label>Tên <input name="name" required autocomplete="off" placeholder="Ví dụ: Siêu thị, Đi chợ, Du lịch Đà Lạt"></label>
+    <div class="row-2">
+      <label>Danh mục <select name="category"></select></label>
+      <label>Ngày <input name="date" type="date" required></label>
+    </div>
+    <p class="muted hint">Các khoản dưới đây thành món nhỏ trong hoá đơn, mỗi món giữ danh mục riêng (thống kê không đổi). Sau đó vẫn chia/sửa được như hoá đơn thường.</p>
+    <ul id="merge-list" class="merge-list"></ul>
+    <p id="merge-total" class="split-rest done"></p>
+    <div class="row-end">
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="ok">Gộp</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Máy tính cho ô số tiền: cộng trừ nhân chia -->
+<dialog id="calc-dialog" class="calc-dialog" aria-label="Máy tính">
+  <div class="calc-display">
+    <div id="calc-expr" class="calc-expr"></div>
+    <div id="calc-result" class="calc-result" aria-live="polite"></div>
+  </div>
+  <div class="calc-keys">
+    <button type="button" class="ck fn" data-k="C">C</button>
+    <button type="button" class="ck fn" data-k="back" aria-label="Xoá">⌫</button>
+    <button type="button" class="ck op" data-k="÷">÷</button>
+    <button type="button" class="ck op" data-k="×">×</button>
+    <button type="button" class="ck" data-k="7">7</button>
+    <button type="button" class="ck" data-k="8">8</button>
+    <button type="button" class="ck" data-k="9">9</button>
+    <button type="button" class="ck op" data-k="−">−</button>
+    <button type="button" class="ck" data-k="4">4</button>
+    <button type="button" class="ck" data-k="5">5</button>
+    <button type="button" class="ck" data-k="6">6</button>
+    <button type="button" class="ck op" data-k="+">+</button>
+    <button type="button" class="ck" data-k="1">1</button>
+    <button type="button" class="ck" data-k="2">2</button>
+    <button type="button" class="ck" data-k="3">3</button>
+    <button type="button" class="ck fn" data-k="k" aria-label="nghìn">k</button>
+    <button type="button" class="ck" data-k="0">0</button>
+    <button type="button" class="ck" data-k="000">000</button>
+    <button type="button" class="ck op" data-k="=">=</button>
+    <button type="button" class="ck ok" data-k="ok">OK</button>
+  </div>
 </dialog>
 
 <div id="toast" class="toast" role="status" hidden></div>
