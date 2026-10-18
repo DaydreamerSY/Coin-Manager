@@ -183,6 +183,95 @@ export function parseAmount(text, { slang = true } = {}) {
   return toks.length ? amountOf(toks, slang) : null;
 }
 
+// ---------- Máy tính trong ô số tiền: "12 kẹo * 10000", "100k - 15k", "12*10" ----------
+
+const CALC_OPS = { '+': '+', '-': '-', '−': '-', '*': '*', '×': '*', '/': '/', '÷': '/', ':': '/' };
+const CALC_UNIT = /^\s*(nghìn|ngàn|triệu|tỷ|tỉ|tr|ca|k|củ|lít|xị)(?!\p{L})/u;
+
+function calcTokens(text, slang) {
+  const s = String(text ?? '').normalize('NFC').toLowerCase();
+  const out = [];
+  for (let i = 0; i < s.length;) {
+    const ch = s[i];
+    if (/\s/.test(ch)) { i++; continue; }
+    if (/\d/.test(ch)) {
+      let j = i;
+      while (j < s.length && /[\d.,]/.test(s[j])) j++;
+      let num = parseNumeric(s.slice(i, j).replace(/[.,]+$/, ''));
+      if (num == null) return null;
+      // Đơn vị ngay sau số: 10k, 2tr, 15 nghìn (không ăn vào tên món như "kẹo")
+      let unit = false;
+      const m = s.slice(j).match(CALC_UNIT);
+      const scale = m && (SCALE[m[1]] ?? (slang ? SLANG_SCALE[m[1]] : undefined));
+      if (scale) { num *= scale; unit = true; j += m[0].length; }
+      out.push({ t: 'num', v: num, unit });
+      i = j;
+      continue;
+    }
+    if (ch in CALC_OPS) { out.push({ t: 'op', v: CALC_OPS[ch] }); i++; continue; }
+    if (ch === '(' || ch === ')') { out.push({ t: ch }); i++; continue; }
+    // Chữ: "x" đứng riêng là phép nhân; các từ khác (tên món, "đồng") bỏ qua
+    let j = i;
+    while (j < s.length && /[\p{L}\p{M}]/u.test(s[j])) j++;
+    if (j === i) { i++; continue; }
+    if (s.slice(i, j) === 'x') out.push({ t: 'op', v: '*' });
+    i = j;
+  }
+  return out;
+}
+
+// Cộng trừ nhân chia có ngoặc, đúng thứ tự ưu tiên. null nếu biểu thức sai hoặc chia cho 0.
+function calcEval(tokens) {
+  let p = 0;
+  const isOp = (...ops) => tokens[p]?.t === 'op' && ops.includes(tokens[p].v);
+  function factor() {
+    const tk = tokens[p++];
+    if (!tk) return null;
+    if (tk.t === 'num') return tk.v;
+    if (tk.t === 'op' && tk.v === '-') { const v = factor(); return v == null ? null : -v; }
+    if (tk.t === '(') { const v = expr(); return tokens[p++]?.t === ')' ? v : null; }
+    return null;
+  }
+  function term() {
+    let v = factor();
+    while (v != null && isOp('*', '/')) {
+      const op = tokens[p++].v;
+      const r = factor();
+      if (r == null || (op === '/' && r === 0)) return null;
+      v = op === '*' ? v * r : v / r;
+    }
+    return v;
+  }
+  function expr() {
+    let v = term();
+    while (v != null && isOp('+', '-')) {
+      const op = tokens[p++].v;
+      const r = term();
+      if (r == null) return null;
+      v = op === '+' ? v + r : v - r;
+    }
+    return v;
+  }
+  const v = expr();
+  return p === tokens.length ? v : null;
+}
+
+/** Biểu thức tiền → số tiền đã làm tròn, hoặc null (không có phép tính / sai / ≤ 0). */
+export function evalAmount(text, { slang = true } = {}) {
+  const toks = calcTokens(text, slang);
+  if (!toks || !toks.some(t => t.t === 'op')) return null;
+  const v = calcEval(toks);
+  if (v == null || !Number.isFinite(v) || v <= 0) return null;
+  // Không ghi đơn vị và kết quả < 1000 → hiểu là nghìn, giống khi đọc: "12*10" = 120.000đ
+  return Math.round(!toks.some(t => t.unit) && v < 1000 ? v * 1000 : v);
+}
+
+/** Ô số tiền: nhận cả phép tính ("12 kẹo * 10000") lẫn cách viết thường ("15k", "mười lăm nghìn"). */
+export function parseAmountInput(text, opts = {}) {
+  const toks = calcTokens(text, opts.slang ?? true);
+  return toks?.some(t => t.t === 'op') ? evalAmount(text, opts) : parseAmount(text, opts);
+}
+
 // Tìm cụm số tiền dài nhất kết thúc ở cuối một dãy từ-số [a, b)
 function bestPhrase(toks, a, b, slang) {
   let minStart = a;

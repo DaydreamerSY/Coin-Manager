@@ -1,4 +1,4 @@
-import { parseUtterance, parseAmount } from './parser.js';
+import { parseUtterance, parseAmountInput } from './parser.js';
 import { buildCategories, classify, normalize, FALLBACK } from './categories.js';
 import { db } from './db.js';
 import { store } from './store.js';
@@ -36,6 +36,9 @@ const state = {
   histQ: '',
   histCat: '',
   dailyAll: false,
+  catTab: 'donut',        // panel danh mục: 'donut' (Tỉ lệ) | 'list' (Danh mục)
+  selecting: false,       // đang chọn khoản để gộp
+  selected: new Set(),
 };
 
 // Khoản cố định (tiền nhà, hóa đơn) làm biểu đồ theo ngày khó đọc nên mặc định tách ra
@@ -102,6 +105,7 @@ async function init() {
   setupHistory();
   setupSettings();
   setupEditDialog();
+  setupCalc();
   document.addEventListener('click', onGlobalClick);
   document.addEventListener('visibilitychange', onVisibilityChange);
   let resizeTimer;
@@ -126,8 +130,14 @@ async function init() {
 
 function onGlobalClick(e) {
   if (e.target.closest('[data-unlock]')) return showView(state.view, { gate: true });
+  if (e.target.closest('[data-calc]')) return openCalc(e.target.closest('.amount-field').querySelector('input'));
   const tx = e.target.closest('.tx[data-id]');
-  if (tx) return openEdit(tx.dataset.id);
+  if (tx) return state.selecting && state.view === 'history' ? toggleSelect(tx.dataset.id) : openEdit(tx.dataset.id);
+  const catTab = e.target.closest('[data-cat-tab]');
+  if (catTab) {
+    state.catTab = catTab.dataset.catTab;
+    return renderStats();
+  }
   const shift = e.target.closest('[data-shift]');
   if (shift) {
     state.month = shiftMonth(state.month, Number(shift.dataset.shift));
@@ -158,6 +168,11 @@ function setupTabs() {
 /** gate: true → hiện màn mở khoá rồi quay lại đúng tab sau khi mở. */
 function showView(name, { gate = false } = {}) {
   if (!TABS.includes(name)) name = 'record';
+  if (name !== 'history' && state.selecting) {
+    state.selecting = false; // rời tab Lịch sử thì thôi chọn để gộp
+    state.selected.clear();
+  }
+  $('#merge-bar').hidden = !(state.selecting && name === 'history');
   state.view = name;
   let shown = name;
   if (!store.hasVault) shown = 'setup';
@@ -364,6 +379,9 @@ function lockNow() {
   editSplits = [];
   $$('form').forEach(f => f.reset());
   state.histQ = '';
+  state.selecting = false;
+  state.selected.clear();
+  $('#merge-bar').hidden = true;
   renderAll();
 }
 
@@ -574,7 +592,7 @@ function renderPreview() {
     <div class="pv-item${it.amount > 0 ? '' : ' warn'}" data-i="${i}">
       <input class="pv-name" data-f="name" value="${esc(it.name)}" placeholder="Tên khoản" aria-label="Tên khoản">
       <div class="pv-row">
-        <span class="amount-field"><input data-f="amount" value="${it.amount ? fmtNum(it.amount) : ''}" placeholder="Số tiền" aria-label="Số tiền"><span>đ</span></span>
+        <span class="amount-field"><input data-f="amount" value="${it.amount ? fmtNum(it.amount) : ''}" placeholder="Số tiền" aria-label="Số tiền" autocomplete="off"><span>đ</span><button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button></span>
         <select data-f="category" aria-label="Danh mục">${categoryOptions(it.category)}</select>
         <button class="icon-btn pv-del" type="button" data-i="${i}" aria-label="Bỏ khoản này">✕</button>
       </div>
@@ -591,7 +609,7 @@ function onPreviewEdit(e) {
   if (!row || !f) return;
   const it = p.items[Number(row.dataset.i)];
   if (f === 'amount') {
-    it.amount = parseAmount(e.target.value, { slang: state.settings.slang }) ?? 0;
+    it.amount = parseAmountInput(e.target.value, { slang: state.settings.slang }) ?? 0;
     if (e.type === 'change' && it.amount) e.target.value = fmtNum(it.amount);
     row.classList.toggle('warn', !(it.amount > 0));
   } else {
@@ -751,6 +769,7 @@ async function renderToday() {
   const list = state.txs.filter(x => x.date === t).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const spent = sum(list.filter(x => x.type === 'expense'));
   $('#today-total').textContent = list.length ? `đã chi ${fmtVND(spent)}` : '';
+  $('#today-merge').hidden = list.length < 2;
   $('#today-list').innerHTML = list.length
     ? list.map(x => txItem(x, { timeline: true })).join('')
     : '<li class="empty">🦆 Chưa có khoản nào hôm nay. Bấm micro và nói thử nhé!</li>';
@@ -761,6 +780,15 @@ async function renderToday() {
 function setupHistory() {
   $('#hist-q').addEventListener('input', e => { state.histQ = e.target.value; renderHistory(); });
   $('#hist-cat').addEventListener('change', e => { state.histCat = e.target.value; renderHistory(); });
+  $('#select-btn').addEventListener('click', () => (state.selecting ? stopSelecting() : startSelecting()));
+  $('#merge-cancel').addEventListener('click', stopSelecting);
+  $('#merge-go').addEventListener('click', openMerge);
+  $('#today-merge').addEventListener('click', () => {
+    state.month = monthOf(today());
+    showView('history');
+    startSelecting();
+  });
+  setupMerge();
 }
 
 function renderHistory() {
@@ -797,6 +825,7 @@ function renderHistory() {
       <ul class="tx-list timeline">${items.map(t => txItem(t, { timeline: true })).join('')}</ul>
     </section>`;
   }).join('') : '<p class="empty card">🦆 Không có khoản nào.</p>';
+  renderSelection();
 }
 
 // ---------- Thống kê ----------
@@ -882,13 +911,13 @@ function renderStats() {
     </div>
 
     <section class="card">
-      <h2 class="card-title">Tỉ lệ chi tiêu</h2>
-      <div id="donut-chart" class="donut"></div>
-    </section>
-
-    <section class="card">
-      <h2 class="card-title">Chi theo danh mục</h2>
-      ${cats.length ? `<ul class="cat-bars">${cats.map(([id, e]) => {
+      <h2 class="card-title"><span>Chi theo danh mục</span>
+        <span class="seg" role="group" aria-label="Kiểu xem">
+          <button type="button" data-cat-tab="donut" aria-pressed="${state.catTab === 'donut'}">Tỉ lệ</button>
+          <button type="button" data-cat-tab="list" aria-pressed="${state.catTab === 'list'}">Danh mục</button>
+        </span></h2>
+      <div id="donut-chart" class="donut"${state.catTab === 'donut' ? '' : ' hidden'}></div>
+      ${cats.length ? `<ul class="cat-bars"${state.catTab === 'list' ? '' : ' hidden'}>${cats.map(([id, e]) => {
         const c = catById(id);
         return `<li><button type="button" class="cat-bar-row tint-${c.tint}" data-goto-cat="${esc(id)}" title="Xem ${e.count} khoản">
           <span class="cat-tile" aria-hidden="true">${esc(c.icon)}</span>
@@ -896,7 +925,7 @@ function renderStats() {
           <span class="cb-value">${fmtVND(e.sum)} <small>${Math.round((e.sum / spent) * 100)}%</small></span>
           <span class="cb-track"><span class="cb-fill" data-w="${Math.max(1, (e.sum / maxCat) * 100)}"></span></span>
         </button></li>`;
-      }).join('')}</ul>` : '<p class="muted">Chưa có khoản chi.</p>'}
+      }).join('')}</ul>` : `<p class="muted"${state.catTab === 'list' ? '' : ' hidden'}>Chưa có khoản chi.</p>`}
     </section>
 
     <section class="card">
@@ -944,7 +973,7 @@ let editSplits = [];
 let splitRec = null;
 
 const editForm = () => $('#edit-form');
-const editTotal = () => parseAmount(editForm().elements.amount.value, { slang: state.settings.slang }) ?? 0;
+const editTotal = () => parseAmountInput(editForm().elements.amount.value, { slang: state.settings.slang }) ?? 0;
 const editParent = () => catById(editForm().elements.category.value);
 
 function renderSplits() {
@@ -954,7 +983,7 @@ function renderSplits() {
     return `<li class="split-item tint-${c.tint}" data-i="${i}">
       <span class="tx-icon" aria-hidden="true">${esc(c.icon)}</span>
       <input data-sf="name" value="${esc(s.name)}" placeholder="Tên món" aria-label="Tên món">
-      <span class="amount-field"><input data-sf="amount" value="${s.amount ? fmtNum(s.amount) : ''}" placeholder="Giá" aria-label="Giá món"><span>đ</span></span>
+      <span class="amount-field"><input data-sf="amount" value="${s.amount ? fmtNum(s.amount) : ''}" placeholder="Giá" aria-label="Giá món" autocomplete="off"><span>đ</span><button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button></span>
       <select data-sf="category" aria-label="Danh mục của món">${categoryOptions(s.category, type)}</select>
       <button type="button" class="icon-btn split-del" data-i="${i}" aria-label="Bỏ món này">✕</button>
     </li>`;
@@ -1078,7 +1107,7 @@ function setupEditDialog() {
     if (!row || !field) return;
     const s = editSplits[Number(row.dataset.i)];
     if (field === 'amount') {
-      s.amount = parseAmount(e.target.value, { slang: state.settings.slang }) ?? 0;
+      s.amount = parseAmountInput(e.target.value, { slang: state.settings.slang }) ?? 0;
       if (e.type === 'change' && s.amount) e.target.value = fmtNum(s.amount);
       renderSplitRest();
     } else if (field === 'category') {
@@ -1387,6 +1416,196 @@ async function importBackup(e) {
   await saveProfile();
   renderAll();
   toast(`Đã gộp ${pulledIds.size} thay đổi từ file${result.failed ? ` (${result.failed} khoản lỗi)` : ''}`);
+}
+
+// ---------- Gộp nhiều khoản thành một hoá đơn ----------
+// Ví dụ đi siêu thị mua lắt nhắt nhiều lần → cuối ngày gộp thành "Siêu thị" có các món bên trong.
+// Mỗi khoản cũ thành một món (giữ danh mục riêng → thống kê không đổi); khoản cũ để lại dấu xoá để máy khác cũng gộp theo.
+
+function startSelecting() {
+  state.selecting = true;
+  state.selected.clear();
+  $('#toast').hidden = true;
+  renderHistory();
+}
+
+function stopSelecting() {
+  state.selecting = false;
+  state.selected.clear();
+  if (state.view === 'history') renderHistory();
+  else renderSelection();
+}
+
+function toggleSelect(id) {
+  state.selected.has(id) ? state.selected.delete(id) : state.selected.add(id);
+  renderSelection();
+}
+
+const selectedTxs = () => state.txs.filter(t => state.selected.has(t.id))
+  .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+
+function renderSelection() {
+  const on = state.selecting && state.view === 'history';
+  $('#hist-list').classList.toggle('selecting', on);
+  $$('#hist-list .tx').forEach(b => {
+    b.classList.toggle('picked', on && state.selected.has(b.dataset.id));
+    if (on) b.setAttribute('aria-pressed', String(state.selected.has(b.dataset.id)));
+    else b.removeAttribute('aria-pressed');
+  });
+  $('#select-btn').textContent = state.selecting ? 'Xong' : '☑️ Gộp khoản';
+  $('#merge-bar').hidden = !on;
+  const items = selectedTxs();
+  const mixed = new Set(items.map(t => t.type)).size > 1;
+  $('#merge-count').textContent = items.length
+    ? (mixed ? 'Không gộp chung khoản chi với khoản thu' : `Đã chọn ${items.length} · ${fmtVND(sum(items))}`)
+    : 'Chạm vào các khoản muốn gộp';
+  $('#merge-go').disabled = items.length < 2 || mixed;
+}
+
+let mergeItems = [];
+let mergeCatTouched = false;
+
+function openMerge() {
+  mergeItems = selectedTxs();
+  if (mergeItems.length < 2) return;
+  const f = $('#merge-form');
+  const type = mergeItems[0].type;
+  // Gợi ý: danh mục chiếm nhiều tiền nhất, ngày muộn nhất
+  const byCat = new Map();
+  mergeItems.flatMap(partsOf).forEach(p => byCat.set(p.category, (byCat.get(p.category) ?? 0) + p.amount));
+  const topCat = [...byCat].sort((a, b) => b[1] - a[1])[0][0];
+  f.reset();
+  f.elements.name.value = catById(topCat).type === type ? catById(topCat).name : '';
+  f.elements.category.innerHTML = categoryOptions(catById(topCat).type === type ? topCat : FALLBACK[type], type);
+  f.elements.date.value = mergeItems.map(t => t.date).sort().at(-1);
+  mergeCatTouched = false;
+  $('#merge-list').innerHTML = mergeItems.map(t => {
+    const c = catById(t.category);
+    return `<li class="merge-row tint-${c.tint}">
+      <span class="tx-icon" aria-hidden="true">${esc(c.icon)}</span>
+      <span class="tx-main"><span class="tx-name">${esc(t.name)}</span><span class="tx-sub">${esc(dayLabel(t.date))} ${esc(timeOf(t.createdAt))}${t.splits?.length ? ` · ${t.splits.length} món` : ''}</span></span>
+      <span class="tx-amt">${fmtVND(t.amount)}</span></li>`;
+  }).join('');
+  $('#merge-total').textContent = `Tổng ${fmtVND(sum(mergeItems))} · ${mergeItems.length} khoản`;
+  $('#merge-dialog').showModal();
+  setTimeout(() => f.elements.name.select(), 50);
+}
+
+function setupMerge() {
+  const mf = $('#merge-form');
+  // Gõ tên "Siêu thị" / "Du lịch Đà Lạt" → danh mục tự theo tên (trừ khi bạn đã tự chọn)
+  mf.elements.name.addEventListener('input', e => {
+    if (mergeCatTouched || !mergeItems.length) return;
+    const c = classify(e.target.value, state.categories, state.learned);
+    if (c && catById(c).type === mergeItems[0].type) mf.elements.category.value = c;
+  });
+  mf.elements.category.addEventListener('change', () => { mergeCatTouched = true; });
+  mf.addEventListener('submit', async e => {
+    if (e.submitter?.value !== 'ok' || !store.unlocked) return;
+    const f = e.target;
+    const cat = catById(f.elements.category.value);
+    const now = new Date().toISOString();
+    const originals = mergeItems.map(t => ({ ...t }));
+    const merged = {
+      id: crypto.randomUUID(),
+      date: f.elements.date.value,
+      name: capitalize(f.elements.name.value.trim()) || cat.name,
+      amount: sum(originals),
+      category: cat.id,
+      type: cat.type,
+      // Khoản đã chia sẵn thì lấy từng món của nó, nên gộp lồng nhau vẫn phẳng
+      splits: originals.flatMap(t => partsOf(t).map(p => ({ id: crypto.randomUUID(), name: p.name, amount: p.amount, category: p.category }))),
+      raw: originals.map(t => t.raw).filter(Boolean).join(' · '),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const tombs = originals.map(t => ({ id: t.id, deleted: true, updatedAt: now }));
+    await store.putTx([merged, ...tombs]);
+    const gone = new Set(originals.map(t => t.id));
+    state.txs = [...state.txs.filter(t => !gone.has(t.id)), merged];
+    state.tombs = [...state.tombs.filter(t => !gone.has(t.id)), ...tombs];
+    await learnFrom([merged]);
+    stopSelecting();
+    renderTopbar();
+    toast(`Đã gộp ${originals.length} khoản thành “${merged.name}”`, { action: 'Hoàn tác', onAction: () => undoMerge(merged, originals) });
+  });
+}
+
+async function undoMerge(merged, originals) {
+  const now = new Date().toISOString();
+  const restored = originals.map(t => ({ ...t, updatedAt: now }));
+  const tomb = { id: merged.id, deleted: true, updatedAt: now };
+  await store.putTx([...restored, tomb]);
+  const back = new Set(restored.map(t => t.id));
+  state.txs = [...state.txs.filter(t => t.id !== merged.id), ...restored];
+  state.tombs = [...state.tombs.filter(t => !back.has(t.id) && t.id !== merged.id), tomb];
+  renderTopbar();
+  renderView(state.view);
+  toast('Đã tách lại như cũ');
+}
+
+// ---------- Máy tính cho ô số tiền ----------
+let calcTarget = null;
+let calcExpr = '';
+
+function calcValue() {
+  return calcExpr ? parseAmountInput(calcExpr, { slang: state.settings.slang }) : null;
+}
+
+function renderCalc() {
+  $('#calc-expr').textContent = calcExpr || '0';
+  const v = calcValue();
+  $('#calc-result').textContent = v ? `= ${fmtVND(v)}` : calcExpr ? '…' : '';
+}
+
+function openCalc(input) {
+  if (!input) return;
+  calcTarget = input;
+  calcExpr = input.value.trim();
+  renderCalc();
+  $('#calc-dialog').showModal();
+}
+
+function calcPress(k) {
+  const last = calcExpr.slice(-1);
+  if (k === 'C') calcExpr = '';
+  else if (k === 'back') calcExpr = calcExpr.slice(0, -1);
+  else if ('+−×÷'.includes(k)) {
+    if (!calcExpr) return;
+    calcExpr = ('+−×÷'.includes(last) ? calcExpr.slice(0, -1) : calcExpr) + k;
+  } else if (k === 'k') {
+    if (/\d/.test(last)) calcExpr += 'k';
+  } else if (k === '=') {
+    const v = calcValue();
+    if (v) calcExpr = String(v);
+  } else if (k === 'ok') {
+    const v = calcValue();
+    if (!v) return toast('Phép tính chưa đúng');
+    calcTarget.value = fmtNum(v);
+    calcTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    calcTarget.dispatchEvent(new Event('change', { bubbles: true }));
+    return $('#calc-dialog').close();
+  } else if (last !== 'k') {
+    calcExpr += k;
+  }
+  renderCalc();
+}
+
+function setupCalc() {
+  const dlg = $('#calc-dialog');
+  dlg.addEventListener('click', e => {
+    const key = e.target.closest('[data-k]');
+    if (key) return calcPress(key.dataset.k);
+    if (e.target === dlg) dlg.close(); // chạm ra ngoài để đóng
+  });
+  // Bàn phím máy tính (khi dùng trên PC)
+  dlg.addEventListener('keydown', e => {
+    const map = { '*': '×', x: '×', '/': '÷', '-': '−', '+': '+', Backspace: 'back', Enter: 'ok', '=': '=', Delete: 'C', k: 'k' };
+    const k = /^\d$/.test(e.key) ? e.key : map[e.key];
+    if (!k) return;
+    e.preventDefault();
+    calcPress(k);
+  });
 }
 
 // ---------- Đồng bộ Google Drive ----------

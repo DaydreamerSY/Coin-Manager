@@ -1,4 +1,4 @@
-import { parseUtterance, parseAmount } from '../js/parser.js';
+import { parseUtterance, parseAmountInput as parseAmount } from '../js/parser.js';
 import { buildCategories, classify } from '../js/categories.js';
 
 const cats = buildCategories();
@@ -88,6 +88,10 @@ const CASES = [
 const AMOUNT_CASES = [
   ['15000', 15000], ['15.000', 15000], ['15k', 15000], ['1tr2', 1200000], ['mười lăm nghìn', 15000],
   ['25', 25000], ['1,5 triệu', 1500000], ['abc', null],
+  // Máy tính trong ô số tiền
+  ['12 kẹo * 10000', 120000], ['12*10', 120000], ['12 x 10k', 120000], ['12x10k', 120000], ['100k - 15k', 85000],
+  ['35+20', 55000], ['120000/12', 10000], ['(20+5)*2', 50000], ['2,5*4', 10000], ['1.500*2', 3000],
+  ['3 ly × 25', 75000], ['200 ÷ 4', 50000], ['10/0', null], ['5-10', null], ['xăng 50 + gửi xe 5', 55000],
 ];
 
 export function runParserTests() {

@@ -35,9 +35,20 @@ Mẫu câu: **`[món] [giá] [món] [giá] …`** — không cần đọc đơn 
 - Thêm từ khoá riêng trong **Cài đặt → Danh mục & từ khoá**: chạm vào danh mục, gõ từ khoá, bấm **Lưu**. Từ khoá bạn thêm thắng từ khoá có sẵn khi dài bằng nhau (ví dụ thêm "bánh" cho Đi chợ).
 - Nút 🎤 nằm giữa thanh dưới cùng (tầm ngón cái) và dùng được ở mọi tab; kết quả + nút Lưu hiện ngay phía trên nút.
 
+## Gộp nhiều khoản thành một hoá đơn
+
+Đi siêu thị/chợ/du lịch mà ghi lắt nhắt nhiều lần → cuối ngày gộp lại: **Lịch sử → ☑️ Gộp khoản** (hoặc nút **☑️ Gộp** ở thẻ *Hôm nay*) → chạm chọn các khoản → **Gộp** → đặt tên ("Siêu thị", "Du lịch Đà Lạt"…; danh mục tự theo tên).
+
+- Mỗi khoản cũ thành một món trong hoá đơn, **giữ danh mục riêng** → thống kê không đổi. Gộp cả hoá đơn đã chia thì lấy từng món của nó.
+- Có **Hoàn tác** ngay sau khi gộp. Đồng bộ Google Drive cũng gộp theo trên máy khác.
+
+## Máy tính trong ô số tiền
+
+Mọi ô số tiền (khi ghi, khi sửa, các món khi chia hoá đơn) nhận phép tính: `12 kẹo * 10000`, `12x10k`, `100k - 15k`, `xăng 50 + gửi xe 5`, `(20+5)*2`. Bấm 🧮 để mở bàn phím máy tính (+ − × ÷). Như khi đọc, kết quả dưới 1000 hiểu là nghìn (`12*10` = 120.000đ).
+
 ## Thống kê
 
-- **Tỉ lệ chi tiêu** (donut): tối đa 6 phần — 5 danh mục lớn nhất + "Khác" gộp phần còn lại, theo khuyến nghị trực quan hoá dữ liệu (nhiều phần hơn thì mắt khó so). Bảng chú giải luôn có icon, % và số tiền; chạm lát hoặc dòng để xem ở giữa. Danh sách đầy đủ ở "Chi theo danh mục" ngay bên dưới.
+- **Chi theo danh mục** có 2 tab: **Tỉ lệ** (mặc định) là donut tối đa 6 phần — 5 danh mục lớn nhất + "Khác" gộp phần còn lại, theo khuyến nghị trực quan hoá dữ liệu (nhiều phần hơn thì mắt khó so). Bảng chú giải luôn có icon, % và số tiền; chạm lát hoặc dòng để xem ở giữa. Tab **Danh mục** liệt kê đủ mọi danh mục.
 - Chi theo ngày (bỏ/không bỏ tiền nhà & hoá đơn), khoản lớn nhất, mua thường xuyên.
 
 ## Chia nhỏ hoá đơn
