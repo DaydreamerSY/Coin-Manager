@@ -7,6 +7,7 @@ import { createRecognizer, VOICE_ERRORS } from './voice.js';
 import { renderDailyColumns, renderDonut } from './charts.js';
 import { mergeRows, mergeProfile, isTomb } from './sync.js';
 import * as gdrive from './gdrive.js';
+import { enhanceDateInputs } from './datepicker.js';
 import {
   fmtVND, fmtNum, fmtCompact, today, addDays, monthOf, shiftMonth, daysInMonth, monthLabel, dayLabel, escapeHtml, capitalize,
 } from './format.js';
@@ -106,6 +107,7 @@ async function init() {
   setupSettings();
   setupEditDialog();
   setupCalc();
+  enhanceDateInputs();
   document.addEventListener('click', onGlobalClick);
   document.addEventListener('visibilitychange', onVisibilityChange);
   let resizeTimer;

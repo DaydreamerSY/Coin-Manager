@@ -610,3 +610,34 @@ body.capturing { padding-bottom: calc(var(--tabbar-h) + 62vh); }
 .ck.op { background: var(--duck-soft); }
 .ck.fn { color: var(--ink-2); font-size: 18px; }
 .ck.ok { background: var(--duck); color: var(--on-duck); box-shadow: 0 3px 0 var(--duck-deep); }
+
+/* ----- Chọn ngày (lịch theo theme, thay hộp chọn ngày của hệ điều hành) ----- */
+.date-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 46px; padding: 8px 14px;
+  border: 2px solid transparent; border-radius: 16px; background: var(--surface-2); color: var(--ink);
+  font-weight: 700; font-size: 15px; text-align: left; cursor: pointer;
+}
+.date-btn span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.date-btn:focus-visible { outline: none; border-color: var(--duck); background: var(--surface); }
+.pv-date .date-btn { flex: 1; }
+.date-dialog { padding: 14px 14px 16px; width: min(380px, calc(100vw - 20px)); border-radius: 26px; }
+@media (max-width: 600px) {
+  .date-dialog { margin: auto 0 0; width: 100vw; max-width: 100vw; border-radius: 26px 26px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+.dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dp-head b { font-size: 18px; font-weight: 900; }
+.dp-head .icon-btn { font-size: 24px; font-weight: 900; }
+.dp-week, .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.dp-week span { font-size: 12px; font-weight: 800; color: var(--muted); padding: 4px 0; }
+.dp-week span:last-child { color: var(--bad); }
+.dp-day {
+  aspect-ratio: 1; max-height: 48px; border: 0; border-radius: 14px; background: transparent; cursor: pointer;
+  font-size: 16px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.dp-day:hover { background: var(--surface-2); }
+.dp-day.is-future { color: var(--muted); font-weight: 600; }
+.dp-day.is-today { box-shadow: inset 0 0 0 2px var(--duck-deep); }
+.dp-day.is-selected { background: var(--duck); color: var(--on-duck); font-weight: 900; box-shadow: 0 3px 0 var(--duck-deep); }
+.dp-day:focus-visible { outline: 3px solid var(--duck); outline-offset: 1px; }
+.dp-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.dp-quick .btn { min-height: 44px; padding: 0 8px; font-size: 14px; }
