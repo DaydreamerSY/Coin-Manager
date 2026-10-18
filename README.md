@@ -35,6 +35,15 @@ Mẫu câu: **`[món] [giá] [món] [giá] …`** — không cần đọc đơn 
 - Thêm từ khoá riêng trong **Cài đặt → Danh mục & từ khoá**: chạm vào danh mục, gõ từ khoá, bấm **Lưu**. Từ khoá bạn thêm thắng từ khoá có sẵn khi dài bằng nhau (ví dụ thêm "bánh" cho Đi chợ).
 - Nút 🎤 nằm giữa thanh dưới cùng (tầm ngón cái) và dùng được ở mọi tab; kết quả + nút Lưu hiện ngay phía trên nút.
 
+## Khoản cố định hằng tháng
+
+**Cài đặt → 🔁 Khoản cố định hằng tháng → + Thêm**: Netflix, Disney+, phí giữ xe, tiền nhà… (có gợi ý sẵn; danh mục tự theo tên). Chọn ngày trừ (ngày 29–31 ở tháng ngắn → ngày cuối tháng).
+
+- App tự ghi vào đúng ngày mỗi tháng khi bạn mở app; lỡ vài ngày/tháng thì **ghi bù** đúng ngày. Khoản tự ghi có dấu 🔁.
+- Xoá một khoản tự ghi thì nó không bị tạo lại; tạm tắt rồi bật lại thì không ghi bù những tháng đã tắt.
+- Dùng nhiều máy: mỗi khoản tự ghi có mã cố định theo "khoản + tháng" nên hai máy không ghi trùng; danh sách khoản cố định cũng đồng bộ qua Google Drive.
+- Biểu đồ theo ngày (chế độ *Hằng ngày*) không tính khoản cố định để thấy rõ chi tiêu thường ngày.
+
 ## Gộp nhiều khoản thành một hoá đơn
 
 Đi siêu thị/chợ/du lịch mà ghi lắt nhắt nhiều lần → cuối ngày gộp lại: **Lịch sử → ☑️ Gộp khoản** (hoặc nút **☑️ Gộp** ở thẻ *Hôm nay*) → chạm chọn các khoản → **Gộp** → đặt tên ("Siêu thị", "Du lịch Đà Lạt"…; danh mục tự theo tên).

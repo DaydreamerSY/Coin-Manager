@@ -641,3 +641,12 @@ body.capturing { padding-bottom: calc(var(--tabbar-h) + 62vh); }
 .dp-day:focus-visible { outline: 3px solid var(--duck); outline-offset: 1px; }
 .dp-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .dp-quick .btn { min-height: 44px; padding: 0 8px; font-size: 14px; }
+
+/* ----- Khoản cố định hằng tháng ----- */
+.rec-list { margin-bottom: 12px; }
+.rec-row.off { opacity: .55; }
+.rec-add { width: 100%; }
+.rec-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.rec-suggest .chip { padding: 6px 12px; font-size: 13px; background: var(--surface-2); }
+dialog label.switch { flex-direction: row; align-items: center; gap: 10px; font-size: 15px; color: var(--ink); }
+.rec-row .tx-sub { white-space: normal; }

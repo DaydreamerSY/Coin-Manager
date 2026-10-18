@@ -8,6 +8,7 @@ import { renderDailyColumns, renderDonut } from './charts.js';
 import { mergeRows, mergeProfile, isTomb } from './sync.js';
 import * as gdrive from './gdrive.js';
 import { enhanceDateInputs } from './datepicker.js';
+import { dueRecurring, nextDue, startYmFor, activeRules, nextYm, ymOf } from './recurring.js';
 import {
   fmtVND, fmtNum, fmtCompact, today, addDays, monthOf, shiftMonth, daysInMonth, monthLabel, dayLabel, escapeHtml, capitalize,
 } from './format.js';
@@ -28,6 +29,7 @@ const state = {
   customUpdatedAt: null,
   learned: {},
   meta: {},
+  recurring: [],          // khoản cố định hằng tháng (trong hồ sơ đã mã hoá)
   categories: buildCategories(),
   // Không nhạy cảm
   settings: { ...DEFAULT_SETTINGS },
@@ -75,11 +77,12 @@ function applyProfile(p) {
   state.custom = p?.custom ?? emptyCustom();
   state.customUpdatedAt = p?.customUpdatedAt ?? null;
   state.learned = p?.learned ?? {};
+  state.recurring = p?.recurring ?? [];
   state.meta = p?.meta ?? {};
   state.categories = buildCategories(state.custom);
 }
 
-const profileNow = () => ({ custom: state.custom, customUpdatedAt: state.customUpdatedAt, learned: state.learned, meta: state.meta });
+const profileNow = () => ({ custom: state.custom, customUpdatedAt: state.customUpdatedAt, learned: state.learned, meta: state.meta, recurring: state.recurring });
 const saveProfile = () => store.saveProfile(profileNow());
 
 function forgetSensitive() {
@@ -338,6 +341,7 @@ async function loadUnlockedData() {
   const inbox = await ingestInbox();
   if (failed + inbox.failed) toast(`Bỏ qua ${failed + inbox.failed} khoản lỗi hoặc không hợp lệ`);
   else if (inbox.count) toast(`Đã thêm ${inbox.count} khoản ghi lúc đang khoá`);
+  await runRecurring();
 }
 
 // Khoản ghi lúc đang khoá chưa có danh mục tự thêm / phần đã học → phân loại lại nếu bạn không tự chọn
@@ -375,7 +379,7 @@ function lockNow() {
   forgetSensitive();
   $$('dialog[open]').forEach(d => d.close());
   // Các tab đã xem vẫn còn số liệu trong DOM (chỉ bị ẩn) — xoá hẳn
-  for (const sel of ['#hist-list', '#hist-summary', '#stats-body', '#today-list', '#cat-settings', '#learned-list', '#data-info', '#split-list', '#split-rest']) {
+  for (const sel of ['#hist-list', '#hist-summary', '#stats-body', '#today-list', '#cat-settings', '#learned-list', '#data-info', '#split-list', '#split-rest', '#rec-list', '#rec-total']) {
     $(sel).replaceChildren();
   }
   editSplits = [];
@@ -394,6 +398,8 @@ function onVisibilityChange() {
   } else if (store.unlocked && hiddenAt && Date.now() > keepUnlockedUntil
     && Date.now() - hiddenAt >= state.settings.lockAfter * 60_000) {
     lockNow();
+  } else if (store.unlocked) {
+    runRecurring().then(n => { if (n) { renderTopbar(); renderView(state.view); } });
   }
 }
 
@@ -731,7 +737,7 @@ async function removeTx(ids) {
 function txItem(t, { showDate = false, timeline = false } = {}) {
   const c = catById(t.category);
   const sign = t.type === 'income' ? '+' : '−';
-  const sub = showDate ? `${dayLabel(t.date)} · ${c.name}` : c.name;
+  const sub = (t.recurringId ? '🔁 ' : '') + (showDate ? `${dayLabel(t.date)} · ${c.name}` : c.name);
   const splits = t.splits?.length
     ? `<span class="tx-splits">${t.splits.map(s => `${esc(s.name)} ${fmtCompact(s.amount)}`).join(' · ')}</span>` : '';
   const btn = `<button type="button" class="tx tint-${c.tint}" data-id="${esc(t.id)}">
@@ -936,7 +942,7 @@ function renderStats() {
           <button type="button" data-daily="daily" aria-pressed="${!state.dailyAll}">Hằng ngày</button>
           <button type="button" data-daily="all" aria-pressed="${state.dailyAll}">Tất cả</button>
         </span></h2>
-      ${state.dailyAll ? '' : '<p class="muted chart-note">Không tính nhà ở &amp; hóa đơn</p>'}
+      ${state.dailyAll ? '' : '<p class="muted chart-note">Không tính nhà ở, hóa đơn &amp; khoản cố định</p>'}
       <div id="daily-chart" class="chart"></div>
     </section>
 
@@ -957,8 +963,8 @@ function renderStats() {
   $$('.cb-fill', body).forEach(el => { el.style.width = `${el.dataset.w}%`; });
 
   const dim = daysInMonth(ym);
-  const dailyParts = exp.flatMap(x => partsOf(x).map(p => ({ ...p, date: x.date, id: x.id })))
-    .filter(p => state.dailyAll || !FIXED_CATEGORIES.has(p.category));
+  const dailyParts = exp.flatMap(x => partsOf(x).map(p => ({ ...p, date: x.date, id: x.id, recurring: !!x.recurringId })))
+    .filter(p => state.dailyAll || (!FIXED_CATEGORIES.has(p.category) && !p.recurring));
   const daily = Array.from({ length: dim }, (_, i) => {
     const iso = `${ym}-${String(i + 1).padStart(2, '0')}`;
     const items = dailyParts.filter(x => x.date === iso);
@@ -1237,6 +1243,7 @@ function setupSettings() {
     renderSettings();
   });
 
+  setupRecurring();
   $('#sync-now').addEventListener('click', () => syncNow());
   $('#set-autosync').addEventListener('change', async e => {
     state.settings.autoSync = e.target.checked;
@@ -1303,6 +1310,7 @@ async function removeKeyword(id, word) {
 
 async function renderSettings() {
   renderSyncCard();
+  renderRecurring();
   if (state.settings.googleConnected) gdrive.preload();
   $('#set-slang').checked = state.settings.slang;
   $('#set-autosave').checked = state.settings.autoSave;
@@ -1418,6 +1426,140 @@ async function importBackup(e) {
   await saveProfile();
   renderAll();
   toast(`Đã gộp ${pulledIds.size} thay đổi từ file${result.failed ? ` (${result.failed} khoản lỗi)` : ''}`);
+}
+
+// ---------- Khoản cố định hằng tháng ----------
+
+/** Ghi các khoản cố định đã tới ngày (ghi bù nếu lỡ). Trả về số khoản vừa ghi. */
+async function runRecurring({ quiet = false } = {}) {
+  if (!store.unlocked || !state.recurring.length) return 0;
+  const ids = new Set([...state.txs, ...state.tombs].map(t => t.id));
+  const due = dueRecurring(state.recurring, id => ids.has(id), today());
+  if (!due.length) return 0;
+  await store.putTx(due);
+  state.txs.push(...due);
+  if (!quiet) toast(`🔁 Đã ghi ${due.length} khoản cố định: ${[...new Set(due.map(t => t.name))].join(', ')}`);
+  return due.length;
+}
+
+const shortDate = iso => { const [, m, d] = iso.split('-').map(Number); return `${d}/${m}`; };
+
+function renderRecurring() {
+  const rules = activeRules(state.recurring).sort((a, b) => a.day - b.day || a.name.localeCompare(b.name, 'vi'));
+  const monthly = sum(rules.filter(r => r.active && r.type !== 'income'));
+  $('#rec-total').textContent = monthly ? `${fmtVND(monthly)}/tháng` : '';
+  $('#rec-list').innerHTML = rules.length ? rules.map(r => {
+    const c = catById(r.category);
+    return `<li><button type="button" class="tx rec-row tint-${c.tint}${r.active ? '' : ' off'}" data-rec="${esc(r.id)}">
+      <span class="tx-icon" aria-hidden="true">${esc(c.icon)}</span>
+      <span class="tx-main"><span class="tx-name">${esc(r.name)}</span>
+        <span class="tx-sub">Ngày ${r.day} hằng tháng · ${r.active ? `kế tiếp ${shortDate(nextDue(r, today()))}` : 'đang tắt'}</span></span>
+      <span class="tx-amt">${fmtVND(r.amount)}</span>
+    </button></li>`;
+  }).join('') : '<li class="empty">Chưa có khoản nào.</li>';
+}
+
+let recEditing = null;
+let recCatTouched = false;
+
+function openRec(id) {
+  const f = $('#rec-form');
+  const rule = id ? state.recurring.find(r => r.id === id) : null;
+  recEditing = rule;
+  recCatTouched = !!rule;
+  f.reset();
+  setFormError(f, '');
+  $('#rec-title').textContent = rule ? 'Sửa khoản cố định' : 'Thêm khoản cố định';
+  $('#rec-suggest').hidden = !!rule;
+  $('#rec-delete').hidden = !rule;
+  $('#rec-this-month-row').hidden = !!rule;
+  $('#rec-active-row').hidden = !rule;
+  f.elements.name.value = rule?.name ?? '';
+  f.elements.amount.value = rule ? fmtNum(rule.amount) : '';
+  f.elements.day.value = String(rule?.day ?? Number(today().slice(8)));
+  f.elements.category.innerHTML = categoryOptions(rule?.category ?? 'giai-tri');
+  f.elements.active.checked = rule?.active ?? true;
+  updateRecThisMonth();
+  $('#rec-dialog').showModal();
+  if (!rule) setTimeout(() => f.elements.name.focus(), 50);
+}
+
+function updateRecThisMonth() {
+  const f = $('#rec-form');
+  const ym = ymOf(today());
+  const day = Number(f.elements.day.value);
+  const [y, m] = ym.split('-').map(Number);
+  const d = Math.min(day, new Date(y, m, 0).getDate());
+  const due = `${ym}-${String(d).padStart(2, '0')}`;
+  $('#rec-this-month').textContent = due < today() ? `Ghi luôn tháng này (ngày ${d}/${m} đã qua)`
+    : due === today() ? `Ghi luôn hôm nay (${d}/${m})` : `Tính từ tháng này (ngày ${d}/${m})`;
+}
+
+function setupRecurring() {
+  const dlg = $('#rec-dialog');
+  const f = $('#rec-form');
+  $('#rec-add').addEventListener('click', () => openRec());
+  $('#rec-list').addEventListener('click', e => {
+    const row = e.target.closest('[data-rec]');
+    if (row) openRec(row.dataset.rec);
+  });
+  $('#rec-suggest').addEventListener('click', e => {
+    const chip = e.target.closest('[data-rec-name]');
+    if (!chip) return;
+    f.elements.name.value = chip.dataset.recName;
+    f.elements.name.dispatchEvent(new Event('input', { bubbles: true }));
+    f.elements.amount.focus();
+  });
+  // Danh mục tự theo tên ("Netflix" → Giải trí, "Phí giữ xe" → Di chuyển) trừ khi bạn đã tự chọn
+  f.elements.name.addEventListener('input', e => {
+    if (recCatTouched) return;
+    const c = classify(e.target.value, state.categories, state.learned);
+    if (c) f.elements.category.value = c;
+  });
+  f.elements.category.addEventListener('change', () => { recCatTouched = true; });
+  f.elements.day.addEventListener('change', updateRecThisMonth);
+
+  f.addEventListener('submit', async e => {
+    if (e.submitter?.value !== 'save' || !store.unlocked) return;
+    const name = capitalize(f.elements.name.value.trim());
+    const amount = parseAmountInput(f.elements.amount.value, { slang: state.settings.slang });
+    const day = Number(f.elements.day.value);
+    if (!name || !amount) {
+      e.preventDefault();
+      return setFormError(f, !name ? 'Nhập tên khoản.' : 'Số tiền chưa hợp lệ.');
+    }
+    const cat = catById(f.elements.category.value);
+    const now = new Date().toISOString();
+    const t = today();
+    let rule;
+    if (recEditing) {
+      const active = f.elements.active.checked;
+      rule = { ...recEditing, name, amount, day, category: cat.id, type: cat.type, active, updatedAt: now };
+      // Bật lại sau khi tạm dừng: không ghi bù những tháng đã tắt
+      if (active && !recEditing.active) rule.startYm = startYmFor(day, t);
+    } else {
+      rule = {
+        id: crypto.randomUUID(), name, amount, day, category: cat.id, type: cat.type, active: true,
+        startYm: f.elements.thisMonth.checked ? ymOf(t) : nextYm(ymOf(t)), updatedAt: now,
+      };
+    }
+    state.recurring = [...state.recurring.filter(r => r.id !== rule.id), rule];
+    await saveProfile();
+    const n = await runRecurring({ quiet: true });
+    renderRecurring();
+    renderTopbar();
+    toast(n ? `Đã lưu “${name}” và ghi ${n} khoản tới hạn` : `Đã lưu “${name}” · kế tiếp ${shortDate(nextDue(rule, t))}`);
+  });
+
+  $('#rec-delete').addEventListener('click', async () => {
+    if (!recEditing || !confirm(`Xoá khoản cố định “${recEditing.name}”? Các khoản đã ghi trước đây vẫn giữ nguyên.`)) return;
+    const gone = { id: recEditing.id, deleted: true, updatedAt: new Date().toISOString() };
+    state.recurring = [...state.recurring.filter(r => r.id !== gone.id), gone];
+    await saveProfile();
+    dlg.close();
+    renderRecurring();
+    toast('Đã xoá khoản cố định');
+  });
 }
 
 // ---------- Gộp nhiều khoản thành một hoá đơn ----------
@@ -1685,6 +1827,7 @@ async function syncNow({ auto = false } = {}) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const file = await gdrive.findSyncFile();
       if (file) ({ pulled, passChanged } = await mergeRemote(await gdrive.downloadSyncFile(file.id)));
+      await runRecurring({ quiet: true });
       // Máy khác vừa ghi trong lúc gộp → gộp lại một lần nữa rồi mới đẩy lên
       const latest = file && attempt === 0 ? await gdrive.findSyncFile() : null;
       if (latest && latest.modifiedTime !== file.modifiedTime) continue;

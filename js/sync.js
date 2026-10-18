@@ -35,7 +35,14 @@ export function mergeProfile(local = {}, remote = {}) {
   const winner = (remoteNewer ? remote.custom : local.custom) ?? {};
   // Danh mục tự thêm: gộp cả hai (chưa có chức năng xoá danh mục) để khoản của máy kia không rơi vào "Khác"
   const added = new Map([...(remote.custom?.added ?? []), ...(local.custom?.added ?? [])].map(c => [c.id, c]));
+  // Khoản cố định: theo từng quy tắc, bản sửa sau cùng thắng (xoá = { deleted: true } để máy kia cũng xoá)
+  const recurring = new Map();
+  for (const r of [...(local.recurring ?? []), ...(remote.recurring ?? [])]) {
+    const cur = recurring.get(r.id);
+    if (!cur || stamp(r) > stamp(cur)) recurring.set(r.id, r);
+  }
   return {
+    recurring: [...recurring.values()],
     custom: { extraKeywords: winner.extraKeywords ?? {}, added: [...added.values()] },
     customUpdatedAt: remoteNewer ? remote.customUpdatedAt : local.customUpdatedAt,
     learned: { ...(remote.learned ?? {}), ...(local.learned ?? {}) },

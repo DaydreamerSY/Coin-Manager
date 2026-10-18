@@ -144,6 +144,13 @@
     </section>
 
     <section class="card">
+      <h2 class="card-title"><span>🔁 Khoản cố định hằng tháng</span><span id="rec-total" class="muted"></span></h2>
+      <p class="muted hint">Netflix, phí giữ xe, tiền nhà… khai báo một lần, app tự ghi vào đúng ngày mỗi tháng (lúc bạn mở app, ghi bù nếu lỡ ngày).</p>
+      <ul id="rec-list" class="tx-list rec-list"></ul>
+      <button id="rec-add" class="btn primary rec-add" type="button">+ Thêm khoản cố định</button>
+    </section>
+
+    <section class="card">
       <h2 class="card-title">Nhận diện</h2>
       <label class="switch"><input id="set-slang" type="checkbox"> <span>Hiểu tiếng lóng: <b>củ</b> = triệu, <b>lít/xị</b> = trăm nghìn, <b>cành</b> = nghìn</span></label>
       <label class="switch"><input id="set-autosave" type="checkbox"> <span>Tự lưu sau 3 giây khi nhận diện đủ tên và số tiền</span></label>
@@ -299,6 +306,28 @@
     <div class="row-end">
       <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
       <button class="btn primary" value="ok">Gộp</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="rec-dialog" class="sheet">
+  <form id="rec-form" method="dialog" autocomplete="off">
+    <h2 id="rec-title">Thêm khoản cố định</h2>
+    <div id="rec-suggest" class="rec-suggest"><button type="button" class="chip" data-rec-name="Netflix">Netflix</button><button type="button" class="chip" data-rec-name="Spotify">Spotify</button><button type="button" class="chip" data-rec-name="YouTube Premium">YouTube Premium</button><button type="button" class="chip" data-rec-name="Disney+">Disney+</button><button type="button" class="chip" data-rec-name="iCloud">iCloud</button><button type="button" class="chip" data-rec-name="Google One">Google One</button><button type="button" class="chip" data-rec-name="Phí giữ xe">Phí giữ xe</button><button type="button" class="chip" data-rec-name="Tiền nhà">Tiền nhà</button><button type="button" class="chip" data-rec-name="Internet">Internet</button><button type="button" class="chip" data-rec-name="Cước điện thoại">Cước điện thoại</button><button type="button" class="chip" data-rec-name="Gym">Gym</button><button type="button" class="chip" data-rec-name="Học phí">Học phí</button></div>
+    <label>Tên <input name="name" required placeholder="Ví dụ: Netflix, phí giữ xe"></label>
+    <div class="row-2">
+      <label>Số tiền <span class="amount-field"><input name="amount" required placeholder="260k"><span>đ</span><button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button></span></label>
+      <label>Trừ vào <select name="day"><option value="1">Ngày 1</option><option value="2">Ngày 2</option><option value="3">Ngày 3</option><option value="4">Ngày 4</option><option value="5">Ngày 5</option><option value="6">Ngày 6</option><option value="7">Ngày 7</option><option value="8">Ngày 8</option><option value="9">Ngày 9</option><option value="10">Ngày 10</option><option value="11">Ngày 11</option><option value="12">Ngày 12</option><option value="13">Ngày 13</option><option value="14">Ngày 14</option><option value="15">Ngày 15</option><option value="16">Ngày 16</option><option value="17">Ngày 17</option><option value="18">Ngày 18</option><option value="19">Ngày 19</option><option value="20">Ngày 20</option><option value="21">Ngày 21</option><option value="22">Ngày 22</option><option value="23">Ngày 23</option><option value="24">Ngày 24</option><option value="25">Ngày 25</option><option value="26">Ngày 26</option><option value="27">Ngày 27</option><option value="28">Ngày 28</option><option value="29">Ngày 29 (hoặc cuối tháng)</option><option value="30">Ngày 30 (hoặc cuối tháng)</option><option value="31">Ngày 31 (hoặc cuối tháng)</option></select></label>
+    </div>
+    <label>Danh mục <select name="category"></select></label>
+    <label class="switch" id="rec-this-month-row"><input type="checkbox" name="thisMonth" checked> <span id="rec-this-month">Tính cả tháng này</span></label>
+    <label class="switch" id="rec-active-row"><input type="checkbox" name="active"> <span>Đang bật (tắt để tạm dừng, không ghi bù khi bật lại)</span></label>
+    <p class="form-error" role="alert"></p>
+    <div class="row-end">
+      <button class="btn danger ghost" type="button" id="rec-delete">Xoá</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="save">Lưu</button>
     </div>
   </form>
 </dialog>
