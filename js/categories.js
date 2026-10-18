@@ -46,7 +46,8 @@ export const DEFAULT_CATEGORIES = [
     'vitamin', 'bảo hiểm y tế', 'gym', 'tập gym', 'yoga', 'bơi', 'thể thao', 'pharmacity', 'long châu', 'an khang',
   ] },
   { id: 'giai-tri', tint: 8, name: 'Giải trí & du lịch', icon: '🎬', type: 'expense', keywords: [
-    'xem phim', 'phim', 'cgv', 'lotte cinema', 'galaxy', 'bhd', 'netflix', 'spotify', 'youtube', 'youtube premium', 'game',
+    'xem phim', 'phim', 'cgv', 'lotte cinema', 'galaxy', 'bhd', 'netflix', 'spotify', 'youtube', 'youtube premium', 'youtube music',
+    'disney', 'disney+', 'apple music', 'icloud', 'google one', 'fpt play', 'vieon', 'galaxy play', 'tv360', 'game',
     'nạp game', 'steam', 'karaoke', 'du lịch', 'khách sạn', 'homestay', 'vé', 'concert', 'bida', 'bi a', 'vé tham quan',
   ] },
   { id: 'ca-nhan', tint: 9, name: 'Cá nhân & làm đẹp', icon: '💇', type: 'expense', keywords: [
