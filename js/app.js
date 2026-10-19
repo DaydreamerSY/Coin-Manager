@@ -9,6 +9,10 @@ import { mergeRows, mergeProfile, isTomb } from './sync.js';
 import * as gdrive from './gdrive.js';
 import { enhanceDateInputs } from './datepicker.js';
 import { openLayer, watchDialogs } from './sheets.js';
+import {
+  WALLET_ICONS, WALLET_SUGGEST, JARS, liveWallets, isSaving, parseShare, shareText, walletForCategory, planSplit,
+  walletBalances, unallocated, upsertWallet, nextTint, nextOrder, monthStart,
+} from './wallets.js';
 import { dueRecurring, nextDue, startYmFor, activeRules, nextYm, ymOf } from './recurring.js';
 import {
   fmtVND, fmtNum, fmtCompact, today, addDays, monthOf, shiftMonth, daysInMonth, monthLabel, dayLabel, escapeHtml, capitalize,
@@ -31,6 +35,8 @@ const state = {
   learned: {},
   meta: {},
   recurring: [],          // khoản cố định hằng tháng (trong hồ sơ đã mã hoá)
+  wallets: [],            // ví nhỏ: ăn uống, tiết kiệm… (trong hồ sơ đã mã hoá)
+  allocs: [],             // các lần chia tiền / chuyển tiền vào ví
   categories: buildCategories(),
   // Không nhạy cảm
   settings: { ...DEFAULT_SETTINGS },
@@ -79,11 +85,14 @@ function applyProfile(p) {
   state.customUpdatedAt = p?.customUpdatedAt ?? null;
   state.learned = p?.learned ?? {};
   state.recurring = p?.recurring ?? [];
+  state.wallets = p?.wallets ?? [];
+  state.allocs = p?.allocs ?? [];
   state.meta = p?.meta ?? {};
   state.categories = buildCategories(state.custom);
 }
 
-const profileNow = () => ({ custom: state.custom, customUpdatedAt: state.customUpdatedAt, learned: state.learned, meta: state.meta, recurring: state.recurring });
+const profileNow = () => ({ custom: state.custom, customUpdatedAt: state.customUpdatedAt, learned: state.learned, meta: state.meta, recurring: state.recurring,
+  wallets: state.wallets, allocs: state.allocs });
 const saveProfile = () => store.saveProfile(profileNow());
 
 function forgetSensitive() {
@@ -111,6 +120,7 @@ async function init() {
   setupSettings();
   setupEditDialog();
   setupCalc();
+  setupWallets();
   enhanceDateInputs();
   watchDialogs();
   // Back đóng bảng đang mở → về mục lịch sử cũ; giữ địa chỉ đúng tab đang xem (để tải lại không nhảy tab)
@@ -142,6 +152,10 @@ async function init() {
 function onGlobalClick(e) {
   if (e.target.closest('[data-unlock]')) return showView(state.view, { gate: true });
   if (e.target.closest('[data-calc]')) return openCalc(e.target.closest('.amount-field').querySelector('input'));
+  const wallet = e.target.closest('[data-wallet]');
+  if (wallet) return openWallet(wallet.dataset.wallet);
+  if (e.target.closest('[data-wallet-new]')) return openWallet();
+  if (e.target.closest('[data-wallet-jars]')) return useJars();
   const tx = e.target.closest('.tx[data-id]');
   if (tx) return state.selecting && state.view === 'history' ? toggleSelect(tx.dataset.id) : openEdit(tx.dataset.id);
   const catTab = e.target.closest('[data-cat-tab]');
@@ -386,7 +400,8 @@ function lockNow() {
   forgetSensitive();
   $$('dialog[open]').forEach(d => d.close());
   // Các tab đã xem vẫn còn số liệu trong DOM (chỉ bị ẩn) — xoá hẳn
-  for (const sel of ['#hist-list', '#hist-summary', '#stats-body', '#today-list', '#cat-settings', '#learned-list', '#data-info', '#split-list', '#split-rest', '#rec-list', '#rec-total']) {
+  for (const sel of ['#hist-list', '#hist-summary', '#stats-body', '#today-list', '#cat-settings', '#learned-list', '#data-info', '#split-list', '#split-rest', '#rec-list', '#rec-total',
+    '#wallet-strip', '#wallet-free', '#wallet-stat', '#wallet-history', '#wallet-cats', '#alloc-rows', '#alloc-income', '#alloc-rest', '#move-hint']) {
     $(sel).replaceChildren();
   }
   editSplits = [];
@@ -704,16 +719,18 @@ async function savePreview() {
     toast('Không lưu được, thử lại nhé');
     return;
   }
+  let note = '';
   if (unlocked) {
     state.txs.push(...txs);
     await learnFrom(txs);
     renderTopbar();
+    note = walletNote(txs);
   }
   // Có thể ghi từ tab bất kỳ → vẽ lại đúng tab đang xem
   renderView(state.view);
   navigator.storage?.persist?.();
   const ids = txs.map(t => t.id);
-  toast(`Đã lưu ${txs.length > 1 ? `${txs.length} khoản · ` : ''}${fmtVND(sum(txs))}${unlocked ? '' : ' (đã mã hoá)'}`, {
+  toast(`Đã lưu ${txs.length > 1 ? `${txs.length} khoản · ` : ''}${fmtVND(sum(txs))}${unlocked ? note : ' (đã mã hoá)'}`, {
     action: 'Hoàn tác', onAction: () => (unlocked ? removeTx(ids) : store.deleteInbox(ids).then(renderToday)),
   });
 }
@@ -780,6 +797,7 @@ function renderSummary() {
 
 async function renderToday() {
   renderSummary();
+  renderWallets();
   if (!store.unlocked) {
     $('#today-total').textContent = '';
     const n = store.hasVault ? await store.inboxCount() : 0;
@@ -1441,6 +1459,376 @@ async function importBackup(e) {
   await saveProfile();
   renderAll();
   toast(`Đã gộp ${pulledIds.size} thay đổi từ file${result.failed ? ` (${result.failed} khoản lỗi)` : ''}`);
+}
+
+// ---------- Ví: chia tiền kiểu "chia hũ" (ăn uống, tiết kiệm, học phí…) ----------
+// Ví + các lần nạp nằm trong hồ sơ đã mã hoá. Khoản chi tự trừ vào ví theo danh mục (xem js/wallets.js).
+
+const CALC_BTN = '<button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button>';
+const incomeTxs = () => state.txs.filter(t => t.type === 'income');
+const expenseParts = txs => txs.filter(t => t.type === 'expense').flatMap(t => partsOf(t).map(p => ({ ...p, date: t.date })));
+const walletStats = () => walletBalances(state.wallets, state.allocs, expenseParts(state.txs), today());
+const walletById = id => liveWallets(state.wallets).find(w => w.id === id);
+const parseMoney = s => parseAmountInput(s, { slang: state.settings.slang });
+const signedCompact = n => `${n < 0 ? '−' : ''}${fmtCompact(Math.abs(n))}`;
+
+function renderWallets() {
+  $('#wallet-card').hidden = !store.unlocked;
+  if (!store.unlocked) return;
+  const ws = liveWallets(state.wallets);
+  $('#wallet-actions').hidden = !ws.length;
+  const { free } = unallocated(incomeTxs(), state.allocs, state.wallets, monthOf(today()));
+  $('#wallet-free').textContent = ws.length && free ? `💸 ${fmtCompact(free)} chưa chia` : '';
+  if (!ws.length) {
+    $('#wallet-strip').innerHTML = `<div class="wallet-empty">
+      <p class="muted">Chia thu nhập vào các ví nhỏ — ăn uống, tiết kiệm, học phí… Khoản chi tự trừ vào ví theo danh mục, nhìn là biết mỗi ví còn bao nhiêu.</p>
+      <div class="btn-row"><button type="button" class="btn primary" data-wallet-jars>🫙 Dùng mẫu 6 hũ</button><button type="button" class="btn" data-wallet-new>+ Tự tạo ví</button></div>
+    </div>`;
+    return;
+  }
+  const stats = walletStats();
+  $('#wallet-strip').innerHTML = ws.map(w => {
+    const s = stats.get(w.id);
+    const saving = isSaving(w);
+    const used = s.balance < 0 ? 100 : s.available > 0 ? Math.min(100, (s.monthSpent / s.available) * 100) : 0;
+    const sub = saving ? (s.monthIn ? `+${fmtCompact(s.monthIn)} tháng này` : 'để dành')
+      : s.balance < 0 ? 'chi quá' : `còn · chi ${s.monthSpent ? fmtCompact(s.monthSpent) : '0'}`;
+    return `<button type="button" class="wallet-tile tint-${w.tint}${s.balance < 0 ? ' over' : ''}" data-wallet="${esc(w.id)}">
+      <span class="wt-head"><span class="wt-icon" aria-hidden="true">${esc(w.icon)}</span><span class="wt-name">${esc(w.name)}</span></span>
+      <b class="wt-bal">${signedCompact(s.balance)}</b>
+      <span class="wt-sub">${esc(sub)}</span>
+      ${saving ? '' : `<span class="wt-track"><span class="wt-fill" data-w="${used.toFixed(1)}"></span></span>`}
+    </button>`;
+  }).join('') + '<button type="button" class="wallet-tile wallet-add" data-wallet-new><span aria-hidden="true">+</span><span class="wt-sub">Thêm ví</span></button>';
+  $$('#wallet-strip .wt-fill').forEach(el => { el.style.width = `${el.dataset.w}%`; });
+}
+
+/** "🍜 Ăn uống còn 1,2tr" cho các ví bị trừ bởi những khoản vừa lưu. */
+function walletNote(txs) {
+  const ws = liveWallets(state.wallets);
+  if (!ws.length) return '';
+  const hit = [...new Set(expenseParts(txs).map(p => {
+    const w = walletForCategory(p.category, ws);
+    return w && p.date >= (w.since ?? '') ? w.id : null;
+  }).filter(Boolean))].slice(0, 2);
+  if (!hit.length) return '';
+  const stats = walletStats();
+  return ' · ' + hit.map(id => {
+    const w = walletById(id);
+    const b = stats.get(id).balance;
+    return `${w.icon} ${w.name} ${b < 0 ? `âm ${fmtCompact(-b)}` : `còn ${fmtCompact(b)}`}`;
+  }).join(', ');
+}
+
+async function useJars() {
+  if (!store.unlocked) return;
+  const now = new Date().toISOString();
+  const since = monthStart(today());
+  const known = new Set(state.categories.map(c => c.id));
+  let ws = state.wallets;
+  for (const j of JARS) {
+    ws = upsertWallet(ws, {
+      id: crypto.randomUUID(), name: j.name, icon: j.icon, tint: nextTint(ws), share: { pct: j.pct },
+      cats: j.cats.filter(c => known.has(c)), catchAll: !!j.catchAll, since, order: nextOrder(ws),
+    }, now);
+  }
+  state.wallets = ws;
+  await saveProfile();
+  renderWallets();
+  toast('Đã tạo 6 hũ (55/10/10/10/10/5%). Có lương thì bấm “Chia tiền” nhé!');
+}
+
+let walletEditing = null;
+let walletCats = new Set();
+
+function renderWalletCats() {
+  const owner = new Map();
+  for (const w of liveWallets(state.wallets)) if (w.id !== walletEditing?.id) (w.cats ?? []).forEach(c => owner.set(c, w));
+  $('#wallet-cats').innerHTML = state.categories.filter(c => c.type === 'expense').map(c => {
+    const on = walletCats.has(c.id);
+    const other = !on && owner.get(c.id);
+    return `<button type="button" class="cat-toggle tint-${c.tint}" data-wcat="${esc(c.id)}" aria-pressed="${on}">${esc(c.icon)} ${esc(c.name)}${other ? `<small> · ${esc(other.name)}</small>` : ''}</button>`;
+  }).join('');
+}
+
+function updateShareHint() {
+  const f = $('#wallet-form');
+  const share = parseShare(f.elements.share.value, parseMoney);
+  $('#wallet-share-hint').textContent = share === undefined ? 'Chưa hiểu — ví dụ 30% hoặc 3tr'
+    : share?.pct ? `${share.pct}% số tiền mỗi lần chia (sau khi trừ các ví số tiền cố định)`
+      : share?.amount ? `${fmtVND(share.amount)} mỗi lần chia` : 'Bỏ trống thì tự nhập lúc chia tiền';
+}
+
+function renderWalletDetail(w) {
+  const s = walletStats().get(w.id);
+  const label = isSaving(w) ? 'Đã để dành' : s.balance < 0 ? 'Chi quá' : 'Còn';
+  $('#wallet-stat').innerHTML = `<b class="${s.balance < 0 ? 'bad' : ''}">${label} ${fmtVND(Math.abs(s.balance))}</b>
+    <span>Tháng ${Number(today().slice(5, 7))}: nạp ${fmtVND(s.monthIn)} · chi ${fmtVND(s.monthSpent)}</span>`;
+  const list = state.allocs.filter(a => !a.deleted && a.wallet === w.id)
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 12);
+  $('#wallet-history').innerHTML = list.length ? list.map(a => {
+    const pair = a.kind === 'move' ? state.allocs.find(x => x.group === a.group && x.id !== a.id) : null;
+    const otherName = pair ? (walletById(pair.wallet)?.name ?? 'ví đã xoá') : '';
+    const what = a.kind === 'move' ? (a.amount < 0 ? `chuyển sang ${otherName}` : `nhận từ ${otherName}`) : 'chia tiền vào ví';
+    return `<li><span><b>${a.amount < 0 ? '−' : '+'}${fmtVND(Math.abs(a.amount))}</b><small>${esc(dayLabel(a.date))} · ${esc(what)}</small></span>
+      <button type="button" class="icon-btn" data-alloc-del="${esc(a.id)}" aria-label="Xoá lần này">✕</button></li>`;
+  }).join('') : '<li class="empty">Chưa nạp lần nào.</li>';
+}
+
+function openWallet(id) {
+  if (!store.unlocked) return;
+  const f = $('#wallet-form');
+  const w = id ? walletById(id) : null;
+  walletEditing = w;
+  f.reset();
+  setFormError(f, '');
+  $('#wallet-title').textContent = w ? `${w.icon} ${w.name}` : 'Thêm ví';
+  $('#wallet-suggest').hidden = !!w;
+  $('#wallet-delete').hidden = !w;
+  $('#wallet-more').hidden = !w;
+  $('#wallet-stat').hidden = !w;
+  f.elements.name.value = w?.name ?? '';
+  f.elements.icon.value = WALLET_ICONS.includes(w?.icon) ? w.icon : '👛';
+  f.elements.share.value = shareText(w?.share, fmtNum);
+  f.elements.catchAll.checked = !!w?.catchAll;
+  f.elements.since.value = w?.since ?? monthStart(today());
+  walletCats = new Set(w?.cats ?? []);
+  renderWalletCats();
+  updateShareHint();
+  if (w) renderWalletDetail(w);
+  $('#wallet-dialog').showModal();
+}
+
+async function removeAllocs(ids, msg) {
+  const now = new Date().toISOString();
+  const groups = new Set(state.allocs.filter(a => ids.includes(a.id) && a.kind === 'move').map(a => a.group));
+  const gone = state.allocs.filter(a => !a.deleted && (ids.includes(a.id) || (a.kind === 'move' && groups.has(a.group))));
+  const goneIds = new Set(gone.map(a => a.id));
+  state.allocs = state.allocs.map(a => (goneIds.has(a.id) ? { id: a.id, deleted: true, updatedAt: now } : a));
+  await saveProfile();
+  refreshWalletViews();
+  toast(msg, {
+    action: 'Hoàn tác',
+    onAction: async () => {
+      const t = new Date().toISOString();
+      state.allocs = state.allocs.map(a => (goneIds.has(a.id) ? { ...gone.find(g => g.id === a.id), updatedAt: t } : a));
+      await saveProfile();
+      refreshWalletViews();
+    },
+  });
+}
+
+function refreshWalletViews() {
+  renderWallets();
+  if ($('#wallet-dialog').open && walletEditing) renderWalletDetail(walletEditing);
+}
+
+let allocTouched = false;
+
+function openAlloc(total) {
+  const ws = liveWallets(state.wallets);
+  if (!store.unlocked) return;
+  if (!ws.length) return openWallet();
+  const f = $('#alloc-form');
+  f.reset();
+  setFormError(f, '');
+  const ym = monthOf(today());
+  const u = unallocated(incomeTxs(), state.allocs, state.wallets, ym);
+  $('#alloc-income').textContent = u.income
+    ? `Thu tháng ${Number(ym.slice(5))}: ${fmtVND(u.income)} · đã chia ${fmtVND(u.given)}`
+    : 'Nhập số tiền muốn chia, ví dụ lương tháng này.';
+  const t = total ?? u.free;
+  f.elements.total.value = t ? fmtNum(t) : '';
+  f.elements.date.value = today();
+  const stats = walletStats();
+  const noShare = !ws.some(w => w.share);
+  $('#alloc-noshare').hidden = !noShare;
+  $('#alloc-refill').hidden = noShare;
+  $('#alloc-rows').innerHTML = ws.map(w => {
+    const sub = [shareText(w.share, fmtCompact), `${isSaving(w) ? 'có' : 'còn'} ${signedCompact(stats.get(w.id).balance)}`].filter(Boolean).join(' · ');
+    return `<li class="alloc-row tint-${w.tint}">
+      <span class="tx-icon" aria-hidden="true">${esc(w.icon)}</span>
+      <span class="tx-main"><span class="tx-name">${esc(w.name)}</span><span class="tx-sub">${esc(sub)}</span></span>
+      <span class="amount-field"><input data-alloc="${esc(w.id)}" autocomplete="off" aria-label="Số tiền vào ví ${esc(w.name)}"><span>đ</span>${CALC_BTN}</span>
+    </li>`;
+  }).join('');
+  fillAlloc();
+  $('#alloc-dialog').showModal();
+}
+
+const allocTotal = () => parseMoney($('#alloc-form').elements.total.value) ?? 0;
+const allocRows = () => $$('[data-alloc]').map(i => ({ wallet: i.dataset.alloc, amount: i.value.trim() ? (parseMoney(i.value) ?? NaN) : 0 }));
+
+function fillAlloc() {
+  const plan = planSplit(state.wallets, allocTotal());
+  $$('[data-alloc]').forEach(i => { const v = plan.get(i.dataset.alloc); i.value = v ? fmtNum(v) : ''; });
+  allocTouched = false;
+  updateAllocRest();
+}
+
+function updateAllocRest() {
+  const total = allocTotal();
+  const given = allocRows().reduce((s, r) => s + (r.amount || 0), 0);
+  const rest = total - given;
+  const el = $('#alloc-rest');
+  el.className = `split-rest${total && rest < 0 ? ' over' : total && rest === 0 ? ' done' : ''}`;
+  el.textContent = !total ? (given ? `Tổng ${fmtVND(given)}` : '')
+    : rest > 0 ? `Còn ${fmtVND(rest)} chưa chia — để lại, chia sau cũng được`
+      : rest < 0 ? `Vượt ${fmtVND(-rest)} so với số tiền` : '✓ Chia vừa đủ';
+}
+
+function openMove(fromId) {
+  if (!store.unlocked) return;
+  const ws = liveWallets(state.wallets);
+  if (ws.length < 2) return toast('Cần ít nhất 2 ví để chuyển tiền');
+  const f = $('#move-form');
+  f.reset();
+  setFormError(f, '');
+  const from = walletById(fromId)?.id ?? ws[0].id;
+  const to = ws.find(w => w.id !== from).id;
+  const opts = sel => ws.map(w => `<option value="${esc(w.id)}"${w.id === sel ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('');
+  f.elements.from.innerHTML = opts(from);
+  f.elements.to.innerHTML = opts(to);
+  f.elements.date.value = today();
+  updateMoveHint();
+  $('#move-dialog').showModal();
+}
+
+function updateMoveHint() {
+  const f = $('#move-form');
+  const w = walletById(f.elements.from.value);
+  if (!w) return;
+  const bal = walletStats().get(w.id).balance;
+  const amount = parseMoney(f.elements.amount.value) ?? 0;
+  $('#move-hint').textContent = `${w.icon} ${w.name} đang ${bal < 0 ? `âm ${fmtVND(-bal)}` : `có ${fmtVND(bal)}`}${amount > bal ? ' — chuyển xong sẽ âm' : ''}`;
+}
+
+function setupWallets() {
+  $('#wallet-icons').innerHTML = WALLET_ICONS.map(i =>
+    `<label class="icon-opt"><input type="radio" name="icon" value="${i}" aria-label="${i}"><span aria-hidden="true">${i}</span></label>`).join('');
+  $('#wallet-suggest').innerHTML = WALLET_SUGGEST.map((s, i) =>
+    `<button type="button" class="chip" data-wsuggest="${i}">${esc(s.icon)} ${esc(s.name)}</button>`).join('');
+  $('#wallet-alloc').addEventListener('click', () => openAlloc());
+  $('#wallet-move').addEventListener('click', () => openMove());
+
+  // ----- Thêm / sửa ví -----
+  const wf = $('#wallet-form');
+  $('#wallet-suggest').addEventListener('click', e => {
+    const chip = e.target.closest('[data-wsuggest]');
+    if (!chip) return;
+    const s = WALLET_SUGGEST[Number(chip.dataset.wsuggest)];
+    wf.elements.name.value = s.name;
+    wf.elements.icon.value = s.icon;
+    walletCats = new Set(s.cats.filter(c => state.categories.some(x => x.id === c)));
+    renderWalletCats();
+  });
+  $('#wallet-cats').addEventListener('click', e => {
+    const b = e.target.closest('[data-wcat]');
+    if (!b) return;
+    const id = b.dataset.wcat;
+    walletCats.has(id) ? walletCats.delete(id) : walletCats.add(id);
+    renderWalletCats();
+  });
+  wf.elements.share.addEventListener('input', updateShareHint);
+  $('#wallet-history').addEventListener('click', e => {
+    const del = e.target.closest('[data-alloc-del]');
+    if (del) removeAllocs([del.dataset.allocDel], 'Đã xoá lần nạp');
+  });
+  $('#wallet-move-from').addEventListener('click', () => openMove(walletEditing?.id));
+  wf.addEventListener('submit', async e => {
+    if (e.submitter?.value !== 'save' || !store.unlocked) return;
+    const name = capitalize(wf.elements.name.value.trim());
+    const share = parseShare(wf.elements.share.value, parseMoney);
+    if (!name || share === undefined) {
+      e.preventDefault();
+      return setFormError(wf, !name ? 'Nhập tên ví.' : 'Tỉ lệ chưa đúng — ví dụ 30% hoặc 3tr.');
+    }
+    const fields = {
+      name, share, icon: wf.elements.icon.value || '👛', cats: [...walletCats],
+      catchAll: wf.elements.catchAll.checked, since: wf.elements.since.value || monthStart(today()),
+    };
+    const w = walletEditing
+      ? { ...walletEditing, ...fields }
+      : { id: crypto.randomUUID(), tint: nextTint(state.wallets), order: nextOrder(state.wallets), ...fields };
+    state.wallets = upsertWallet(state.wallets, w, new Date().toISOString());
+    await saveProfile();
+    renderWallets();
+    const pct = liveWallets(state.wallets).reduce((s, x) => s + (x.share?.pct ?? 0), 0);
+    toast(`Đã ${walletEditing ? 'lưu' : 'tạo'} ví “${name}”${pct > 100 ? ` · tổng tỉ lệ các ví đang là ${pct}%` : ''}`);
+  });
+  $('#wallet-delete').addEventListener('click', async () => {
+    const w = walletEditing;
+    if (!w || !confirm(`Xoá ví “${w.name}”? Các khoản chi vẫn giữ nguyên, chỉ thôi theo dõi số dư của ví này.`)) return;
+    state.wallets = state.wallets.map(x => (x.id === w.id ? { id: w.id, deleted: true, updatedAt: new Date().toISOString() } : x));
+    await saveProfile();
+    $('#wallet-dialog').close();
+    renderWallets();
+    toast(`Đã xoá ví “${w.name}”`, {
+      action: 'Hoàn tác',
+      onAction: async () => {
+        state.wallets = state.wallets.map(x => (x.id === w.id ? { ...w, updatedAt: new Date().toISOString() } : x));
+        await saveProfile();
+        renderWallets();
+      },
+    });
+  });
+
+  // ----- Chia tiền vào ví -----
+  const af = $('#alloc-form');
+  af.elements.total.addEventListener('input', () => (allocTouched ? updateAllocRest() : fillAlloc()));
+  $('#alloc-rows').addEventListener('input', () => { allocTouched = true; updateAllocRest(); });
+  $('#alloc-refill').addEventListener('click', fillAlloc);
+  af.addEventListener('submit', async e => {
+    if (e.submitter?.value !== 'ok' || !store.unlocked) return;
+    const rows = allocRows();
+    const given = rows.reduce((s, r) => s + (r.amount || 0), 0);
+    const total = allocTotal();
+    const err = rows.some(r => Number.isNaN(r.amount) || r.amount < 0) ? 'Có ví nhập số tiền chưa đúng.'
+      : !given ? 'Chưa có ví nào được chia tiền.'
+        : total && given > total ? `Các ví cộng lại vượt ${fmtVND(given - total)} so với số tiền.` : '';
+    if (err) {
+      e.preventDefault();
+      return setFormError(af, err);
+    }
+    const now = new Date().toISOString();
+    const group = crypto.randomUUID();
+    const date = af.elements.date.value || today();
+    const items = rows.filter(r => r.amount > 0).map(r => ({
+      id: crypto.randomUUID(), date, wallet: r.wallet, amount: r.amount, kind: 'in', group, createdAt: now, updatedAt: now,
+    }));
+    state.allocs = [...state.allocs, ...items];
+    await saveProfile();
+    refreshWalletViews();
+    toast(`Đã chia ${fmtVND(given)} vào ${items.length} ví`, {
+      action: 'Hoàn tác', onAction: () => removeAllocs(items.map(i => i.id), 'Đã huỷ lần chia'),
+    });
+  });
+
+  // ----- Chuyển giữa các ví -----
+  const mf = $('#move-form');
+  mf.addEventListener('input', updateMoveHint);
+  mf.addEventListener('change', updateMoveHint);
+  mf.addEventListener('submit', async e => {
+    if (e.submitter?.value !== 'ok' || !store.unlocked) return;
+    const from = mf.elements.from.value;
+    const to = mf.elements.to.value;
+    const amount = parseMoney(mf.elements.amount.value);
+    if (from === to || !(amount > 0)) {
+      e.preventDefault();
+      return setFormError(mf, from === to ? 'Chọn hai ví khác nhau.' : 'Số tiền chưa hợp lệ.');
+    }
+    const now = new Date().toISOString();
+    const group = crypto.randomUUID();
+    const date = mf.elements.date.value || today();
+    const leg = (wallet, amt) => ({ id: crypto.randomUUID(), date, wallet, amount: amt, kind: 'move', group, createdAt: now, updatedAt: now });
+    const items = [leg(from, -amount), leg(to, amount)];
+    state.allocs = [...state.allocs, ...items];
+    await saveProfile();
+    refreshWalletViews();
+    toast(`Đã chuyển ${fmtVND(amount)}: ${walletById(from).name} → ${walletById(to).name}`, {
+      action: 'Hoàn tác', onAction: () => removeAllocs([items[0].id], 'Đã huỷ lần chuyển'),
+    });
+  });
 }
 
 // ---------- Khoản cố định hằng tháng ----------

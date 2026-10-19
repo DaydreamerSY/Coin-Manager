@@ -35,6 +35,17 @@ Mẫu câu: **`[món] [giá] [món] [giá] …`** — không cần đọc đơn 
 - Thêm từ khoá riêng trong **Cài đặt → Danh mục & từ khoá**: chạm vào danh mục, gõ từ khoá, bấm **Lưu**. Từ khoá bạn thêm thắng từ khoá có sẵn khi dài bằng nhau (ví dụ thêm "bánh" cho Đi chợ).
 - Nút 🎤 nằm giữa thanh dưới cùng (tầm ngón cái) và dùng được ở mọi tab; kết quả + nút Lưu hiện ngay phía trên nút.
 
+## Ví nhỏ (chia hũ)
+
+Thẻ **👛 Các ví** ở tab Hôm nay: chia thu nhập vào các ví như ăn uống, tiết kiệm, học phí… rồi nhìn là biết mỗi ví còn bao nhiêu.
+
+- **Tạo ví:** bấm *Dùng mẫu 6 hũ* (Thiết yếu 55%, Tiết kiệm dài hạn 10%, Giáo dục 10%, Hưởng thụ 10%, Tự do tài chính 10%, Cho đi 5%) hoặc *+ Tự tạo ví* (có gợi ý: Ăn uống, Tiết kiệm, Học phí, Nhà & hoá đơn…).
+- **Mỗi ví trừ tiền theo danh mục:** ví Ăn uống gồm Ăn uống, Cà phê, Đi chợ… Mỗi danh mục thuộc một ví. Có thể đặt một ví *nhận cả các khoản chi chưa thuộc ví nào*. Ví không gắn danh mục nào là **ví để dành** (chỉ cộng vào).
+- **💸 Chia tiền vào ví:** số tiền gợi ý là thu nhập tháng này chưa chia. App chia theo *Mỗi lần chia tiền* của từng ví: `3tr` là số cố định (chia trước), `30%` tính trên phần còn lại. Sửa tay từng ví được, có 🧮.
+- **⇄ Chuyển** tiền giữa hai ví (ví dụ lấy từ Hưởng thụ bù cho Giáo dục). Số dư cộng dồn qua các tháng; ví chi quá hiện số âm màu đỏ.
+- Lưu một khoản chi xong, thông báo cho biết ví đó còn bao nhiêu. Chạm vào ví để sửa, xem / xoá các lần nạp và chuyển.
+- Ví và các lần nạp được **mã hoá** cùng hồ sơ và đồng bộ qua Google Drive.
+
 ## Khoản cố định hằng tháng
 
 **Cài đặt → 🔁 Khoản cố định hằng tháng → + Thêm**: Netflix, Disney+, phí giữ xe, tiền nhà… (có gợi ý sẵn; danh mục tự theo tên). Chọn ngày trừ (ngày 29–31 ở tháng ngắn → ngày cuối tháng).
@@ -168,6 +179,7 @@ js/app.js              điều khiển giao diện, khoá/mở khoá, thống k�
 js/voice.js            Web Speech API (vi-VN)
 js/charts.js           biểu đồ cột theo ngày, donut tỉ lệ (SVG, không thư viện)
 js/recurring.js        khoản cố định hằng tháng (tính ngày tới hạn, ghi bù)
+js/wallets.js          ví nhỏ / chia hũ (số dư, gợi ý chia tiền theo tỉ lệ)
 js/datepicker.js       lịch chọn ngày theo theme
 js/sheets.js           nút Back đóng hộp thoại, vuốt xuống để đóng bảng
 icons/duck*.svg        linh vật vịt (vẽ tay bằng SVG)

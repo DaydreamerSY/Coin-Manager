@@ -76,6 +76,15 @@
       <div class="sum-col"><span class="sum-label" id="sum-inc-label">Thu tháng này</span><b id="sum-inc" class="sum-value">—</b></div>
     </section>
 
+    <section id="wallet-card" class="card wallet-card" hidden>
+      <h2 class="card-title"><span>👛 Các ví</span><span id="wallet-free" class="muted"></span></h2>
+      <div id="wallet-strip" class="wallet-strip"></div>
+      <div id="wallet-actions" class="wallet-actions">
+        <button id="wallet-alloc" class="btn primary" type="button">💸 Chia tiền vào ví</button>
+        <button id="wallet-move" class="btn" type="button">⇄ Chuyển</button>
+      </div>
+    </section>
+
     <p class="mic-hint">Bấm <span class="mic-hint-icon" aria-hidden="true">🎤</span> ở dưới rồi đọc các món kèm giá, ví dụ: <q>bánh hai lăm nước ngọt hai lăm rau hai lăm</q></p>
 
     <form id="text-form" class="text-form" method="dialog" autocomplete="off">
@@ -328,6 +337,74 @@
       <span class="spacer"></span>
       <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
       <button class="btn primary" value="save">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="wallet-dialog" class="sheet">
+  <form id="wallet-form" method="dialog" autocomplete="off">
+    <h2 id="wallet-title">Thêm ví</h2>
+    <div id="wallet-suggest" class="rec-suggest"></div>
+    <div id="wallet-stat" class="wallet-stat"></div>
+    <label>Tên ví <input name="name" required placeholder="Ví dụ: Ăn uống, Tiết kiệm, Học phí"></label>
+    <fieldset class="icon-pick"><legend>Biểu tượng</legend><div id="wallet-icons" class="icon-grid"></div></fieldset>
+    <label>Mỗi lần chia tiền <input name="share" placeholder="30% hoặc 3tr"></label>
+    <p id="wallet-share-hint" class="muted hint"></p>
+    <fieldset class="wallet-cats"><legend>Trừ vào ví này khi chi cho</legend><div id="wallet-cats" class="kw-chips"></div>
+      <p class="muted hint">Không chọn danh mục nào = ví để dành (tiết kiệm, quỹ khẩn cấp…).</p></fieldset>
+    <label class="switch"><input type="checkbox" name="catchAll"> <span>Nhận cả các khoản chi chưa thuộc ví nào</span></label>
+    <label>Tính các khoản chi từ ngày <input name="since" type="date"></label>
+    <div id="wallet-more" class="wallet-more">
+      <h3 class="wallet-h3">Các lần nạp / chuyển</h3>
+      <ul id="wallet-history" class="wallet-history"></ul>
+      <button type="button" id="wallet-move-from" class="btn">⇄ Chuyển tiền sang ví khác</button>
+    </div>
+    <p class="form-error" role="alert"></p>
+    <div class="row-end">
+      <button class="btn danger ghost" type="button" id="wallet-delete">Xoá ví</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="save">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="alloc-dialog" class="sheet">
+  <form id="alloc-form" method="dialog" autocomplete="off">
+    <h2>💸 Chia tiền vào ví</h2>
+    <p id="alloc-income" class="muted hint"></p>
+    <div class="row-2 money-row">
+      <label>Số tiền <span class="amount-field"><input name="total" placeholder="15tr"><span>đ</span><button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button></span></label>
+      <label>Ngày <input name="date" type="date" required></label>
+    </div>
+    <div class="alloc-head"><span>Vào từng ví</span><button type="button" class="btn chip-btn" id="alloc-refill">↺ Theo tỉ lệ</button></div>
+    <p id="alloc-noshare" class="muted hint">Chưa đặt tỉ lệ cho ví nào — nhập số tiền từng ví, hoặc đặt “Mỗi lần chia tiền” trong phần sửa ví.</p>
+    <ul id="alloc-rows" class="alloc-rows"></ul>
+    <p id="alloc-rest" class="split-rest"></p>
+    <p class="form-error" role="alert"></p>
+    <div class="row-end">
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="ok">Chia</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="move-dialog" class="sheet">
+  <form id="move-form" method="dialog" autocomplete="off">
+    <h2>⇄ Chuyển tiền giữa các ví</h2>
+    <div class="row-2">
+      <label>Từ ví <select name="from"></select></label>
+      <label>Sang ví <select name="to"></select></label>
+    </div>
+    <div class="row-2 money-row">
+      <label>Số tiền <span class="amount-field"><input name="amount" required placeholder="500k"><span>đ</span><button type="button" class="calc-btn" data-calc aria-label="Mở máy tính">🧮</button></span></label>
+      <label>Ngày <input name="date" type="date" required></label>
+    </div>
+    <p id="move-hint" class="muted hint"></p>
+    <p class="form-error" role="alert"></p>
+    <div class="row-end">
+      <button class="btn ghost" value="cancel" formnovalidate>Huỷ</button>
+      <button class="btn primary" value="ok">Chuyển</button>
     </div>
   </form>
 </dialog>

@@ -2,8 +2,9 @@ import { runParserTests } from './parser.test.js';
 import { runVaultTests } from './vault.test.js';
 import { runSyncTests } from './sync.test.js';
 import { runRecurringTests } from './recurring.test.js';
+import { runWalletTests } from './wallets.test.js';
 
-const results = [...runParserTests(), ...runSyncTests(), ...runRecurringTests()];
+const results = [...runParserTests(), ...runSyncTests(), ...runRecurringTests(), ...runWalletTests()];
 try {
   results.push(...await runVaultTests());
 } catch (e) {
