@@ -26,6 +26,15 @@ export function mergeRows(local, remote) {
   return { rows: [...out.values()], pulledIds, pushed };
 }
 
+function latestById(a, b) {
+  const out = new Map();
+  for (const r of [...(a ?? []), ...(b ?? [])]) {
+    const cur = out.get(r.id);
+    if (!cur || stamp(r) > stamp(cur)) out.set(r.id, r);
+  }
+  return [...out.values()];
+}
+
 /**
  * Danh mục tự thêm + từ khoá: bản sửa sau cùng thắng (để xoá từ khoá ở một máy cũng có tác dụng ở máy kia).
  * Phần "đã học": gộp cả hai, máy này thắng khi trùng. meta (lần sao lưu, tài khoản Google...) là của riêng từng máy.
@@ -35,14 +44,11 @@ export function mergeProfile(local = {}, remote = {}) {
   const winner = (remoteNewer ? remote.custom : local.custom) ?? {};
   // Danh mục tự thêm: gộp cả hai (chưa có chức năng xoá danh mục) để khoản của máy kia không rơi vào "Khác"
   const added = new Map([...(remote.custom?.added ?? []), ...(local.custom?.added ?? [])].map(c => [c.id, c]));
-  // Khoản cố định: theo từng quy tắc, bản sửa sau cùng thắng (xoá = { deleted: true } để máy kia cũng xoá)
-  const recurring = new Map();
-  for (const r of [...(local.recurring ?? []), ...(remote.recurring ?? [])]) {
-    const cur = recurring.get(r.id);
-    if (!cur || stamp(r) > stamp(cur)) recurring.set(r.id, r);
-  }
   return {
-    recurring: [...recurring.values()],
+    // Khoản cố định, ví, lần nạp ví: theo từng mục, bản sửa sau cùng thắng (xoá = { deleted: true } để máy kia cũng xoá)
+    recurring: latestById(local.recurring, remote.recurring),
+    wallets: latestById(local.wallets, remote.wallets),
+    allocs: latestById(local.allocs, remote.allocs),
     custom: { extraKeywords: winner.extraKeywords ?? {}, added: [...added.values()] },
     customUpdatedAt: remoteNewer ? remote.customUpdatedAt : local.customUpdatedAt,
     learned: { ...(remote.learned ?? {}), ...(local.learned ?? {}) },
